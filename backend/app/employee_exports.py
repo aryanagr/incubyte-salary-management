@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -18,6 +19,7 @@ from .services import employee_filter_clauses, employee_sort_clause
 
 MAX_EXPORT_ROWS = 25_000
 FORMULA_PREFIXES = ("=", "+", "-", "@")
+logger = logging.getLogger(__name__)
 
 
 def create_export_job(db: Session, data: EmployeeExportRequest, user: DemoUser) -> EmployeeExportJob:
@@ -136,13 +138,13 @@ def process_export_job_in_session(db: Session, job_id: str) -> None:
             csv_bytes=csv_bytes,
             row_count=row_count,
         )
-    except Exception as exc:
+    except Exception:
+        logger.exception("Employee export job %s failed", job_id)
         db.rollback()
         failed = db.get(EmployeeExportJob, job_id)
         if failed:
             failed.status = "failed"
-            # Do not persist provider payloads, credentials or stack traces.
-            failed.error_message = str(exc)[:500]
+            failed.error_message = "Delivery failed and will be retried automatically."
             failed.completed_at = datetime.now(timezone.utc)
             db.commit()
         raise
