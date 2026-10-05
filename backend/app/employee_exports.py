@@ -17,6 +17,7 @@ from .schemas import EmployeeExportRequest
 from .services import employee_filter_clauses, employee_sort_clause
 
 MAX_EXPORT_ROWS = 25_000
+FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 def create_export_job(db: Session, data: EmployeeExportRequest, user: DemoUser) -> EmployeeExportJob:
@@ -47,6 +48,12 @@ def mark_export_enqueue_failure(db: Session, job: EmployeeExportJob) -> None:
     job.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(job)
+
+
+def _csv_safe(value: str) -> str:
+    if value.startswith(FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
 
 
 def _export_rows(db: Session, filters: dict) -> list[Employee]:
@@ -89,14 +96,14 @@ def build_employee_export_csv(db: Session, job: EmployeeExportJob) -> tuple[byte
     for employee in rows:
         writer.writerow(
             [
-                employee.employee_code,
-                employee.full_name,
-                employee.job_title.name,
-                employee.country.name,
-                employee.country.currency_code,
+                _csv_safe(employee.employee_code),
+                _csv_safe(employee.full_name),
+                _csv_safe(employee.job_title.name),
+                _csv_safe(employee.country.name),
+                _csv_safe(employee.country.currency_code),
                 f"{employee.salary:.2f}",
-                employee.department,
-                employee.employment_status,
+                _csv_safe(employee.department),
+                _csv_safe(employee.employment_status),
                 employee.hired_at.isoformat() if employee.hired_at else "",
             ]
         )
