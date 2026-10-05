@@ -105,47 +105,51 @@ def build_employee_export_csv(db: Session, job: EmployeeExportJob) -> tuple[byte
     return ("\ufeff" + buffer.getvalue()).encode("utf-8"), len(rows)
 
 
-def process_export_job(job_id: str) -> None:
-    with SessionLocal() as db:
-        job = db.get(EmployeeExportJob, job_id)
-        if not job:
-            # A deleted/nonexistent job is not retryable queue work.
-            return
-        if job.status == "sent":
-            # Vercel Queues is at-least-once. Sent jobs are idempotent no-ops.
-            return
+def process_export_job_in_session(db: Session, job_id: str) -> None:
+    job = db.get(EmployeeExportJob, job_id)
+    if not job:
+        # A deleted/nonexistent job is not retryable queue work.
+        return
+    if job.status == "sent":
+        # Vercel Queues is at-least-once. Sent jobs are idempotent no-ops.
+        return
 
-        job.status = "processing"
-        job.started_at = datetime.now(timezone.utc)
-        job.completed_at = None
-        job.error_message = None
-        job.attempt_count += 1
+    job.status = "processing"
+    job.started_at = datetime.now(timezone.utc)
+    job.completed_at = None
+    job.error_message = None
+    job.attempt_count += 1
+    db.commit()
+
+    try:
+        csv_bytes, row_count = build_employee_export_csv(db, job)
+        provider_message_id = send_employee_export_email(
+            job_id=job.id,
+            recipient_email=job.recipient_email,
+            csv_bytes=csv_bytes,
+            row_count=row_count,
+        )
+    except Exception as exc:
+        db.rollback()
+        failed = db.get(EmployeeExportJob, job_id)
+        if failed:
+            failed.status = "failed"
+            # Do not persist provider payloads, credentials or stack traces.
+            failed.error_message = str(exc)[:500]
+            failed.completed_at = datetime.now(timezone.utc)
+            db.commit()
+        raise
+
+    delivered = db.get(EmployeeExportJob, job_id)
+    if delivered:
+        delivered.status = "sent"
+        delivered.row_count = row_count
+        delivered.provider_message_id = provider_message_id
+        delivered.error_message = None
+        delivered.completed_at = datetime.now(timezone.utc)
         db.commit()
 
-        try:
-            csv_bytes, row_count = build_employee_export_csv(db, job)
-            provider_message_id = send_employee_export_email(
-                job_id=job.id,
-                recipient_email=job.recipient_email,
-                csv_bytes=csv_bytes,
-                row_count=row_count,
-            )
-        except Exception as exc:
-            db.rollback()
-            failed = db.get(EmployeeExportJob, job_id)
-            if failed:
-                failed.status = "failed"
-                # Do not persist provider payloads, credentials or stack traces.
-                failed.error_message = str(exc)[:500]
-                failed.completed_at = datetime.now(timezone.utc)
-                db.commit()
-            raise
 
-        delivered = db.get(EmployeeExportJob, job_id)
-        if delivered:
-            delivered.status = "sent"
-            delivered.row_count = row_count
-            delivered.provider_message_id = provider_message_id
-            delivered.error_message = None
-            delivered.completed_at = datetime.now(timezone.utc)
-            db.commit()
+def process_export_job(job_id: str) -> None:
+    with SessionLocal() as db:
+        process_export_job_in_session(db, job_id)
