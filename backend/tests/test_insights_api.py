@@ -59,3 +59,31 @@ def test_empty_country_returns_stable_empty_insight(client):
     assert body["max_salary"] is None
     assert body["average_salary"] is None
     assert body["total_payroll"] == "0.00"
+
+
+def test_insights_change_after_salary_update_and_delete(client, employee_payload):
+    add_employee(client, employee_payload, code="X1", name="A", salary="100", title_id=1, country="IN")
+    add_employee(client, employee_payload, code="X2", name="B", salary="300", title_id=1, country="IN")
+
+    listing = client.get("/api/v1/employees", params={"search": "X1"}).json()
+    employee_id = listing["items"][0]["id"]
+    assert client.patch(f"/api/v1/employees/{employee_id}", json={"salary": "500"}).status_code == 200
+
+    insight = client.get("/api/v1/insights/countries/IN").json()
+    assert Decimal(insight["average_salary"]) == Decimal("400.00")
+    assert Decimal(insight["max_salary"]) == Decimal("500.00")
+
+    assert client.delete(f"/api/v1/employees/{employee_id}").status_code == 204
+    insight = client.get("/api/v1/insights/countries/IN").json()
+    assert insight["employee_count"] == 1
+    assert Decimal(insight["average_salary"]) == Decimal("300.00")
+
+
+def test_money_aggregates_have_stable_two_decimal_serialization(client, employee_payload):
+    add_employee(client, employee_payload, code="M1", name="A", salary="100.00", title_id=1, country="IN")
+    add_employee(client, employee_payload, code="M2", name="B", salary="101.00", title_id=1, country="IN")
+    body = client.get("/api/v1/insights/countries/IN").json()
+    assert body["average_salary"] == "100.50"
+    assert body["min_salary"] == "100.00"
+    assert body["max_salary"] == "101.00"
+    assert body["total_payroll"] == "201.00"

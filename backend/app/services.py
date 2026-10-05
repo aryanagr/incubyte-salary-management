@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException, status
@@ -11,6 +12,13 @@ from sqlalchemy.orm import Session
 from .models import Country, Employee, JobTitle
 from .schemas import EmployeeCreate, EmployeeUpdate
 
+
+
+
+def _as_money(value) -> Decimal | None:
+    if value is None:
+        return None
+    return Decimal(str(value)).quantize(Decimal("0.01"))
 
 SORT_COLUMNS = {
     "full_name": Employee.full_name,
@@ -50,7 +58,9 @@ def create_employee(db: Session, data: EmployeeCreate) -> Employee:
 
 
 def get_employee(db: Session, employee_id: int) -> Employee:
-    employee = db.get(Employee, employee_id)
+    employee = db.scalar(
+        select(Employee).where(Employee.id == employee_id, Employee.deleted_at.is_(None))
+    )
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     return employee
@@ -75,9 +85,12 @@ def update_employee(db: Session, employee_id: int, data: EmployeeUpdate) -> Empl
 
 
 def delete_employee(db: Session, employee_id: int) -> None:
-    employee = get_employee(db, employee_id)
-    db.delete(employee)
-    db.commit()
+    employee = db.get(Employee, employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    if employee.deleted_at is None:
+        employee.deleted_at = datetime.now(timezone.utc)
+        db.commit()
 
 
 def list_employees(
@@ -93,7 +106,7 @@ def list_employees(
     sort_by: str,
     sort_dir: str,
 ) -> dict:
-    filters = []
+    filters = [Employee.deleted_at.is_(None)]
     if search:
         term = f"%{search.strip()}%"
         filters.append(or_(Employee.full_name.ilike(term), Employee.employee_code.ilike(term)))
@@ -147,19 +160,19 @@ def country_insights(db: Session, country_code: str) -> dict:
             func.max(Employee.salary),
             func.avg(Employee.salary),
             func.coalesce(func.sum(Employee.salary), 0),
-        ).where(Employee.country_code == country.code)
+        ).where(Employee.country_code == country.code, Employee.deleted_at.is_(None))
     ).one()
     count, minimum, maximum, average, total = aggregate
 
     highest = db.scalar(
         select(Employee)
-        .where(Employee.country_code == country.code)
+        .where(Employee.country_code == country.code, Employee.deleted_at.is_(None))
         .order_by(Employee.salary.desc(), Employee.id.asc())
         .limit(1)
     )
     lowest = db.scalar(
         select(Employee)
-        .where(Employee.country_code == country.code)
+        .where(Employee.country_code == country.code, Employee.deleted_at.is_(None))
         .order_by(Employee.salary.asc(), Employee.id.asc())
         .limit(1)
     )
@@ -167,24 +180,24 @@ def country_insights(db: Session, country_code: str) -> dict:
     breakdown_rows = db.execute(
         select(JobTitle, func.count(Employee.id), func.avg(Employee.salary))
         .join(Employee, Employee.job_title_id == JobTitle.id)
-        .where(Employee.country_code == country.code)
+        .where(Employee.country_code == country.code, Employee.deleted_at.is_(None))
         .group_by(JobTitle.id, JobTitle.name)
         .order_by(JobTitle.name.asc())
     ).all()
     return {
         "country": country,
         "employee_count": int(count or 0),
-        "min_salary": minimum,
-        "max_salary": maximum,
-        "average_salary": average,
-        "total_payroll": Decimal(total or 0).quantize(Decimal("0.01")),
+        "min_salary": _as_money(minimum),
+        "max_salary": _as_money(maximum),
+        "average_salary": _as_money(average),
+        "total_payroll": _as_money(total) or Decimal("0.00"),
         "highest_paid_employee": _employee_summary(highest),
         "lowest_paid_employee": _employee_summary(lowest),
         "job_titles": [
             {
                 "job_title": job_title,
                 "employee_count": int(title_count),
-                "average_salary": title_average,
+                "average_salary": _as_money(title_average),
             }
             for job_title, title_count, title_average in breakdown_rows
         ],
@@ -200,13 +213,17 @@ def job_title_country_insights(db: Session, country_code: str, job_title_id: int
             func.min(Employee.salary),
             func.max(Employee.salary),
             func.avg(Employee.salary),
-        ).where(Employee.country_code == country.code, Employee.job_title_id == job_title.id)
+        ).where(
+            Employee.country_code == country.code,
+            Employee.job_title_id == job_title.id,
+            Employee.deleted_at.is_(None),
+        )
     ).one()
     return {
         "country": country,
         "job_title": job_title,
         "employee_count": int(count or 0),
-        "min_salary": minimum,
-        "max_salary": maximum,
-        "average_salary": average,
+        "min_salary": _as_money(minimum),
+        "max_salary": _as_money(maximum),
+        "average_salary": _as_money(average),
     }

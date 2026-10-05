@@ -1,70 +1,60 @@
-# Product Requirements Document
+# One-Page Product Requirements — Salary Management
 
-## Product framing
-A salary-management workspace for an HR Manager in an organization of roughly 10,000 employees. The product should make employee records easy to maintain and make compensation patterns easy to inspect without exporting data to spreadsheets.
+> Initial version was written before implementation. Recruiter clarification received on 2026-10-05 confirmed/refined the decisions below; the clarification is treated as a requirements change, not a history rewrite.
 
-## Primary user
-**HR Manager** — needs accurate employee records, quick salary comparisons, and enough context to spot outliers or inconsistent compensation.
+## User and outcome
+**Primary user:** a trusted HR Manager managing roughly 10,000 full-time employees.
 
-## Goals
-1. Manage employees through a usable UI: create, view, update and delete.
-2. Answer country-level compensation questions quickly.
-3. Answer job-title compensation questions within a country.
-4. Remain responsive with 10,000 seeded employees and routine reseeding.
-5. Be understandable to another engineer through tests, architecture notes, trade-offs and incremental commits.
+The product must let HR maintain employee records and answer salary questions quickly without exporting data to spreadsheets.
 
-## Core employee data
-- Full name (required)
-- Job title (required)
-- Country (required)
-- Annual salary (required, positive)
-- Department (required)
-- Employment status (active, leave, terminated)
-- Hire date
-- Stable external employee code
-- Created/updated timestamps
-
-## Functional requirements
+## In-scope product behavior
 ### Employee management
-- Paginated employee table.
-- Search by name or employee code.
-- Filter by country, job title, department and status.
-- Sort by name, salary, hire date or updated date.
-- Add employee with field validation.
-- Edit employee.
-- View employee detail.
-- Delete employee with confirmation.
+- Create, view, update and delete employees through the UI.
+- Required business data: unique employee code, full name, controlled job title, controlled country, annual gross base salary, department and employment status; hire date is optional.
+- Employee list is server-paginated, searchable by name/code, filterable and sortable.
+- **Delete is a soft delete:** the record is retained with `deleted_at`, but disappears from the normal employee directory and all current salary analytics.
+
+### Salary representation
+- Salary means **annual gross base salary**.
+- Salary has an associated currency through the employee's controlled Country record (`currency_code`).
+- Salaries are retained in local currency; required analytics are scoped to one country, so the product does **not** perform FX conversion or cross-country salary comparison.
+- Money is stored as fixed-precision decimal, never floating point.
 
 ### Salary insights
 For a selected country:
-- Employee count
-- Minimum salary
-- Maximum salary
-- Average salary
-- Total payroll
-- Average salary by selected job title
-- Role breakdown with headcount and average salary
-- Highest-paid and lowest-paid employee as useful HR context
+- employee count, minimum, maximum and average salary;
+- total payroll;
+- average salary by job title;
+- job-title breakdown/headcount;
+- highest- and lowest-paid current employee as additional useful context.
 
-## Non-functional requirements
-- API pagination is mandatory; never return all 10k employees to the browser by default.
-- Numeric salary values are stored as fixed precision decimal, never floating point.
-- Indexed country/job-title fields support analytics queries.
-- Deterministic seed data allows repeatable tests and demos.
-- Seed operation is idempotent and uses batched writes/upserts.
-- Tests are isolated, fast and deterministic.
-- Errors return stable machine-readable JSON.
-- Health endpoint supports deployment verification.
-- CORS is environment-configured.
+Deleted employees are excluded from every current insight.
 
-## Product assumptions
-1. Salary is annual gross salary in the employee country's local currency. Because required analytics compare salaries *within the same country*, no FX conversion is performed.
-2. Authentication/authorization is deliberately out of MVP scope because the assessment does not define identity or roles. In a real HR system, SSO + RBAC is a release blocker.
-3. Deleting an employee is a hard delete for assessment simplicity. Production HR systems would usually require audit history or soft deletion.
-4. 10,000 employees is small enough for indexed relational aggregation; no warehouse is needed.
+### Seed workflow
+- Repository provides suitable `first_names.txt` and `last_names.txt` files.
+- Script generates/upserts **10,000 deterministic employees** using a stable employee code.
+- Re-running the seed is intentionally **idempotent**: it restores the canonical seeded dataset instead of appending duplicates, including reactivating a previously soft-deleted seeded record.
+- Writes are batched and benchmarkable because seed performance is an explicit assessment concern.
 
-## Explicit clarification candidates for Incubyte
-These are not blockers, but would be good questions if there is time to contact the recruiter:
-- Should salary values be compared only within a country's local currency, or normalized to one currency?
-- Is authentication/RBAC expected for the assessment deployment?
-- Is hard delete acceptable, or should deleted employees be retained for auditability?
+## Key product/engineering decisions
+- Country and Job Title are controlled reference tables to prevent analytics fragmentation from spelling/case variants.
+- Unique employee code is the stable business identifier.
+- Current salary lives on Employee for this MVP; no effective-dated salary-history model is added.
+- PostgreSQL is the production database; indexed SQL aggregation is sufficient at 10k rows.
+- Modular monolith: Next.js/React UI + FastAPI API; no microservices or cache without measured need.
+
+## Deliberately out of scope
+- Authentication, SSO, RBAC or multiple user personas — recruiter confirmed a single trusted HR Manager is sufficient.
+- Salary history/effective-dated compensation — optional, not needed for the assessment.
+- FX-rate ingestion or normalized cross-country reporting.
+- Full audit/event log, restore UI, approvals/workflows, payroll calculation, bonuses/equity/benefits.
+- Redis, Kafka, warehouse, search cluster or precomputed analytics at this dataset size.
+
+## Acceptance criteria
+1. HR can create/view/edit/delete an employee from the UI with validation and stable error handling.
+2. Deleted employees are retained in storage but absent from normal list/detail APIs and salary analytics.
+3. Country and country+job-title salary metrics are mathematically correct and currency-aware.
+4. Employee listing remains paginated and responsive with 10,000 records.
+5. Re-running the 10k seed does not increase row count and restores canonical seeded records.
+6. Tests cover CRUD, validation, analytics, deletion semantics and seeding; CI enforces the test/coverage gate.
+7. Repository documents architecture, trade-offs, deliberate exclusions, AI workflow and incremental Git history.

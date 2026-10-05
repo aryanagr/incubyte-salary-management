@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 EMPLOYMENT_STATUSES = {"active", "leave", "terminated"}
@@ -99,6 +99,14 @@ class EmployeeUpdate(BaseModel):
     @classmethod
     def normalize_optional_salary(cls, value: Decimal | None) -> Decimal | None:
         return None if value is None else value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @model_validator(mode="after")
+    def reject_null_for_required_fields(self):
+        nullable_only = {"hired_at"}
+        for field_name in self.model_fields_set:
+            if field_name not in nullable_only and getattr(self, field_name) is None:
+                raise ValueError(f"{field_name} cannot be null")
+        return self
 
 
 class EmployeeOut(BaseModel):

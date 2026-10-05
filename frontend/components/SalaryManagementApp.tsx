@@ -70,6 +70,14 @@ function EmployeeForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -146,6 +154,14 @@ function EmployeeForm({
 }
 
 function EmployeeDetail({ employee, onClose }: { employee: Employee; onClose: () => void }) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="modal detail-modal" role="dialog" aria-modal="true" aria-labelledby="employee-detail-title" onMouseDown={(e) => e.stopPropagation()}>
@@ -173,7 +189,9 @@ export default function SalaryManagementApp() {
   const [pages, setPages] = useState(0);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [country, setCountry] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [insightCountry, setInsightCountry] = useState("");
+  const [filterCountry, setFilterCountry] = useState("");
   const [jobTitle, setJobTitle] = useState("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [loading, setLoading] = useState(true);
@@ -181,6 +199,7 @@ export default function SalaryManagementApp() {
   const [insight, setInsight] = useState<CountryInsight | null>(null);
   const [formEmployee, setFormEmployee] = useState<Employee | "new" | null>(null);
   const [detailEmployee, setDetailEmployee] = useState<Employee | null>(null);
+  const [dataVersion, setDataVersion] = useState(0);
 
   const loadEmployees = useCallback(async () => {
     setLoading(true);
@@ -189,8 +208,8 @@ export default function SalaryManagementApp() {
       const result = await getEmployees({
         page,
         page_size: PAGE_SIZE,
-        search,
-        country_code: country,
+        search: debouncedSearch,
+        country_code: filterCountry,
         job_title_id: jobTitle || undefined,
         sort_by: "full_name",
         sort_dir: sortDir,
@@ -203,15 +222,23 @@ export default function SalaryManagementApp() {
     } finally {
       setLoading(false);
     }
-  }, [country, jobTitle, page, search, sortDir]);
+  }, [debouncedSearch, filterCountry, jobTitle, page, sortDir]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 250);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
   useEffect(() => {
     getReferenceData()
       .then((data) => {
         setReference(data);
-        setCountry(data.countries[0]?.code ?? "");
+        setInsightCountry(data.countries[0]?.code ?? "");
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Could not load reference data"));
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Could not load reference data");
+        setLoading(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -219,24 +246,26 @@ export default function SalaryManagementApp() {
   }, [reference, loadEmployees]);
 
   useEffect(() => {
-    if (!country) return;
-    getCountryInsight(country).then(setInsight).catch(() => setInsight(null));
-  }, [country, total]);
+    if (!insightCountry) return;
+    getCountryInsight(insightCountry).then(setInsight).catch(() => setInsight(null));
+  }, [insightCountry, dataVersion]);
 
   const selectedCurrency = useMemo(
-    () => reference?.countries.find((item) => item.code === country)?.currency_code ?? "USD",
-    [country, reference],
+    () => reference?.countries.find((item) => item.code === insightCountry)?.currency_code ?? "USD",
+    [insightCountry, reference],
   );
 
   function refreshAfterMutation() {
     setFormEmployee(null);
+    setDataVersion((value) => value + 1);
     void loadEmployees();
   }
 
   async function remove(employee: Employee) {
-    if (!window.confirm(`Delete ${employee.full_name}? This action cannot be undone.`)) return;
+    if (!window.confirm(`Remove ${employee.full_name} from the current directory? The record will be retained for traceability.`)) return;
     try {
       await deleteEmployee(employee.id);
+      setDataVersion((value) => value + 1);
       if (employees.length === 1 && page > 1) setPage((value) => value - 1);
       else void loadEmployees();
     } catch (err) {
@@ -259,7 +288,7 @@ export default function SalaryManagementApp() {
         <div className="section-heading">
           <div><p className="eyebrow">Salary insights</p><h2 id="insights-title">Country overview</h2></div>
           <label className="compact-label">Country
-            <select value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
+            <select value={insightCountry} onChange={(e) => setInsightCountry(e.target.value)}>
               {reference?.countries.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
             </select>
           </label>
@@ -296,8 +325,8 @@ export default function SalaryManagementApp() {
           <div><p className="eyebrow">Directory</p><h2 id="employees-title">Employees <span className="count-badge">{total.toLocaleString()}</span></h2></div>
         </div>
         <div className="toolbar">
-          <input className="search-input" placeholder="Search name or employee code" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
-          <select aria-label="Filter country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}>
+          <input className="search-input" aria-label="Search employees" placeholder="Search name or employee code" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+          <select aria-label="Filter country" value={filterCountry} onChange={(e) => { setFilterCountry(e.target.value); setPage(1); }}>
             <option value="">All countries</option>
             {reference?.countries.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}
           </select>

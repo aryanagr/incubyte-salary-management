@@ -41,13 +41,13 @@ This file records intentionally separate review passes. They are role-separated 
 
 ### Separate compensation table now?
 - **Architect:** Good production modeling for salary history.
-- **PM:** History is not asked and hiring team has not answered yet.
-- **Decision:** Keep current salary on employee for MVP; document migration path to effective-dated compensation. This minimizes speculative scope.
+- **PM:** Recruiter confirmed current salary is sufficient and history is optional.
+- **Decision:** Keep current salary on Employee for MVP; document the effective-dated CompensationRecord migration path but do not implement it.
 
 ### Normalize Country/JobTitle into tables now?
 - **Data/QA:** Prevents fragmented aggregates.
 - **Backend:** Adds joins and seed complexity.
-- **Decision:** Use canonical controlled values in application/domain initially; schema can promote them to reference tables if recruiter confirms master-data expectation. Composite string indexes still satisfy current workload cleanly.
+- **Decision:** Keep Country and JobTitle as normalized reference tables. Recruiter confirmed there are no prescribed masters and asked us to document our chosen consistency strategy.
 
 ### Cache analytics?
 - **Performance:** 10k rows + proper indexes is trivial for PostgreSQL.
@@ -55,5 +55,11 @@ This file records intentionally separate review passes. They are role-separated 
 
 ### Soft delete?
 - **Security/production:** Prefer retention/audit.
-- **Assessment literal CRUD:** Hard delete is simpler and observable.
-- **Decision:** Hard delete until recruiter clarifies, with explicit production caveat.
+- **Assessment guidance:** deletion semantics are intentionally left to product judgment.
+- **Decision:** Soft delete using `deleted_at`; exclude deleted rows from current directory/analytics and keep restore UI outside scope.
+
+
+### Authentication/RBAC?
+- **Security:** compensation data would require strict authorization in production.
+- **Recruiter guidance:** authentication is not required for the assessment; a single trusted HR Manager is acceptable.
+- **Decision:** Do not add auth plumbing to the take-home. Document SSO/RBAC/audit as production requirements rather than speculative assessment scope.

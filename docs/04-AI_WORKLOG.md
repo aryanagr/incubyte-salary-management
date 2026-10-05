@@ -17,3 +17,19 @@ This repository intentionally records the AI-assisted workflow because the asses
 - AI-generated code is treated as a draft and must pass tests/review.
 - Review and test passes are intentionally separated from the implementation pass to reduce confirmation bias.
 - Unknown product decisions are labeled as assumptions instead of invented facts.
+
+## Recruiter clarification change-control pass — 2026-10-05
+The recruiter replied after the initial implementation and intentionally left several choices to the candidate. The response was treated as a product change request rather than silently rewriting earlier reasoning.
+
+Decisions locked after the reply:
+- annual gross base salary;
+- currency required, local-currency reporting accepted;
+- controlled Country/Job Title retained by choice;
+- deterministic idempotent seed retained by choice;
+- repository-owned name files;
+- unique employee code retained;
+- soft deletion selected over hard delete;
+- current salary only (no compensation history);
+- authentication/RBAC deliberately excluded for the trusted-HR assessment persona.
+
+The implementation change is being performed TDD-first: document the refined one-page PRD, add deletion/seed regression tests, observe failure, then change migration/model/query behavior and rerun the full suite.

@@ -36,6 +36,7 @@ class Employee(Base):
         Index("ix_employees_country_salary", "country_code", "salary"),
         Index("ix_employees_department", "department"),
         Index("ix_employees_status", "employment_status"),
+        Index("ix_employees_deleted_at", "deleted_at"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -51,6 +52,7 @@ class Employee(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     country: Mapped[Country] = relationship(back_populates="employees", lazy="joined")
     job_title: Mapped[JobTitle] = relationship(back_populates="employees", lazy="joined")

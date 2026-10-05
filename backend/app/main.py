@@ -27,7 +27,12 @@ from .services import (
     update_employee,
 )
 
-app = FastAPI(title="Salary Management API", version="1.0.0")
+app = FastAPI(
+    title="Salary Management API",
+    version="1.0.0",
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -64,7 +69,7 @@ def list_employees_endpoint(
     country_code: str | None = Query(None, min_length=2, max_length=2),
     job_title_id: int | None = Query(None, gt=0),
     department: str | None = Query(None, max_length=100),
-    employment_status: str | None = Query(None, max_length=20),
+    employment_status: str | None = Query(None, pattern="^(active|leave|terminated)$"),
     sort_by: str = Query("full_name", pattern="^(full_name|salary|hired_at|updated_at|employee_code)$"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),

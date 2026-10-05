@@ -34,6 +34,13 @@ JOB_TITLES = [
     "HR Business Partner",
 ]
 DEPARTMENTS = ["Engineering", "Product", "Data", "Quality", "Design", "People"]
+SALARY_RANGES = {
+    "IN": (Decimal("600000"), Decimal("4200000")),
+    "US": (Decimal("55000"), Decimal("220000")),
+    "GB": (Decimal("35000"), Decimal("140000")),
+    "DE": (Decimal("45000"), Decimal("165000")),
+    "CA": (Decimal("50000"), Decimal("180000")),
+}
 
 
 @dataclass(frozen=True)
@@ -76,7 +83,9 @@ def _generate_rows(db: Session, count: int, first_names: list[str], last_names: 
         full_name = f"{first} {last}" if cycle == 0 else f"{first} {last} {cycle + 1}"
         country = countries[index % len(countries)]
         title = job_titles[index % len(job_titles)]
-        annual_salary = Decimal(45000 + ((index * 7919) % 155000)).quantize(Decimal("0.01"))
+        salary_min, salary_max = SALARY_RANGES.get(country.code, (Decimal("45000"), Decimal("200000")))
+        salary_span = int(salary_max - salary_min)
+        annual_salary = (salary_min + Decimal((index * 7919) % max(salary_span, 1))).quantize(Decimal("0.01"))
         rows.append(
             {
                 "employee_code": f"EMP-{index + 1:05d}",
@@ -87,6 +96,7 @@ def _generate_rows(db: Session, count: int, first_names: list[str], last_names: 
                 "department": DEPARTMENTS[index % len(DEPARTMENTS)],
                 "employment_status": "active" if index % 20 else "leave",
                 "hired_at": date(2015, 1, 1) + timedelta(days=(index * 17) % 3650),
+                "deleted_at": None,
             }
         )
     return rows
@@ -102,6 +112,7 @@ def _upsert_batch(db: Session, batch: list[dict]) -> None:
         "department": "excluded.department",
         "employment_status": "excluded.employment_status",
         "hired_at": "excluded.hired_at",
+        "deleted_at": "excluded.deleted_at",
     }
     if dialect == "sqlite":
         stmt = sqlite_insert(Employee).values(batch)
@@ -157,6 +168,7 @@ def seed_employees(
     for start_index in range(0, len(rows), batch_size):
         _upsert_batch(db, rows[start_index : start_index + batch_size])
         db.commit()
+    db.expire_all()
     elapsed = time.perf_counter() - start
     return SeedResult(processed=count, elapsed_seconds=elapsed)
 

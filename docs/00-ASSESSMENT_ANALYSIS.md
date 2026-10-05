@@ -34,7 +34,7 @@ These assumptions are deliberately reversible:
 2. Country and job title are canonical reference data exposed as select/autocomplete values, not arbitrary strings.
 3. An employee has a stable `employee_code` independent from database ID.
 4. Seed runs are idempotent: deterministic employees are upserted rather than duplicated.
-5. Deletion is hard delete in the assessment MVP; production recommendation is soft-delete + audit trail.
+5. Deletion uses soft delete (`deleted_at`) by product choice; deleted employees are excluded from current views/analytics while the row is retained.
 6. The employee record stores current salary only in MVP; salary-history modeling is documented as a production extension.
 7. The assessment deployment is a trusted HR-user environment; production requires SSO/RBAC before handling real compensation data.
 
@@ -152,3 +152,14 @@ Acceptance criteria:
 - complex org hierarchy.
 
 These are rejected to preserve quality and avoid speculative complexity while keeping extension points documented.
+
+
+## Recruiter clarification resolution — 2026-10-05
+- Salary: annual gross base salary with an associated currency; local currencies are acceptable.
+- Country/Job Title: no prescribed masters; controlled reference values are our chosen consistency strategy.
+- Repeated seed: no prescribed behavior; deterministic idempotent upsert is our chosen contract.
+- Name files: repository may provide its own suitable source files.
+- Identity: unique employee code is reasonable/recommended.
+- Delete: product decision; soft delete chosen.
+- Salary history: current salary is sufficient; history is deliberately excluded.
+- Authentication/RBAC: not required; trusted single-HR-user environment accepted.

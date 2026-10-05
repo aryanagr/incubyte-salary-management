@@ -42,6 +42,7 @@ def db() -> Generator[Session, None, None]:
         )
         session.commit()
         yield session
+    engine.dispose()
 
 
 @pytest.fixture()

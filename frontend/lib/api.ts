@@ -1,6 +1,6 @@
 import type { CountryInsight, Employee, EmployeeInput, EmployeeList, ReferenceData } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 export class ApiError extends Error {
   constructor(
@@ -24,9 +24,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let message = `Request failed (${response.status})`;
     try {
-      const body = (await response.json()) as { detail?: string | { message?: string } };
+      const body = (await response.json()) as {
+        detail?: string | { message?: string } | Array<{ msg?: string; loc?: Array<string | number> }>;
+      };
       if (typeof body.detail === "string") message = body.detail;
-      else if (body.detail?.message) message = body.detail.message;
+      else if (Array.isArray(body.detail)) {
+        const first = body.detail[0];
+        if (first?.msg) message = first.msg;
+      } else if (body.detail?.message) message = body.detail.message;
     } catch {
       // Preserve stable generic error if body is not JSON.
     }
