@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, getCurrentUser, logout } from "@/lib/api";
 import type { AuthUser } from "@/lib/types";
-import SalaryManagementApp from "@/components/SalaryManagementApp";
+import SalaryManagementWorkspace from "@/components/SalaryManagementWorkspace";
 
 export default function AuthenticatedApp() {
   const router = useRouter();
@@ -64,7 +64,7 @@ export default function AuthenticatedApp() {
         </div>
         <button className="button secondary" onClick={signOut}>Log out</button>
       </div>
-      <SalaryManagementApp canManage={user.role === "hr_manager"} />
+      <SalaryManagementWorkspace canManage={user.role === "hr_manager"} />
     </>
   );
 }
