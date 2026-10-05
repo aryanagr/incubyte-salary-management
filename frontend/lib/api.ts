@@ -1,4 +1,4 @@
-import type { CountryInsight, Employee, EmployeeInput, EmployeeList, ReferenceData } from "./types";
+import type { AuthUser, CountryInsight, Employee, EmployeeInput, EmployeeList, ReferenceData } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -14,6 +14,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
+    credentials: "same-origin",
     headers: {
       Accept: "application/json",
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -40,6 +41,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
+}
+
+export function login(email: string, password: string) {
+  return request<AuthUser>("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function logout() {
+  return request<void>("/api/v1/auth/logout", { method: "POST" });
+}
+
+export function getCurrentUser() {
+  return request<AuthUser>("/api/v1/auth/me");
 }
 
 export function getReferenceData() {
