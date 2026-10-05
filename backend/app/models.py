@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, Numeric, String, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -56,3 +56,27 @@ class Employee(Base):
 
     country: Mapped[Country] = relationship(back_populates="employees", lazy="joined")
     job_title: Mapped[JobTitle] = relationship(back_populates="employees", lazy="joined")
+
+
+class EmployeeExportJob(Base):
+    __tablename__ = "employee_export_jobs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued','processing','sent','failed')",
+            name="ck_employee_export_job_status",
+        ),
+        Index("ix_employee_export_jobs_status_created", "status", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    requested_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    recipient_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    filters: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider_message_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

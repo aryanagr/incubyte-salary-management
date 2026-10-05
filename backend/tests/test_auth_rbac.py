@@ -1,4 +1,7 @@
+import pytest
 from fastapi.testclient import TestClient
+
+from app import auth
 
 
 def test_login_exposes_manager_identity(raw_client: TestClient):
@@ -50,3 +53,17 @@ def test_logout_clears_session(raw_client: TestClient):
     assert raw_client.get("/api/v1/auth/me").status_code == 200
     assert raw_client.post("/api/v1/auth/logout").status_code == 204
     assert raw_client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_production_auth_secret_is_required(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.delenv("AUTH_SECRET", raising=False)
+    with pytest.raises(RuntimeError, match="AUTH_SECRET is required"):
+        auth._secret()
+
+
+def test_production_auth_secret_rejects_short_values(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("AUTH_SECRET", "too-short")
+    with pytest.raises(RuntimeError, match="at least 32 characters"):
+        auth._secret()

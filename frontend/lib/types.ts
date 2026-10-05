@@ -69,3 +69,31 @@ export type CountryInsight = {
     average_salary: string | null;
   }>;
 };
+
+export type EmployeeExportStatus = "queued" | "processing" | "sent" | "failed";
+
+export type EmployeeExportJob = {
+  id: string;
+  status: EmployeeExportStatus;
+  recipient_email: string;
+  filters: {
+    search: string | null;
+    country_code: string | null;
+    job_title_id: number | null;
+    sort_by: "full_name" | "salary" | "hired_at" | "updated_at" | "employee_code";
+    sort_dir: "asc" | "desc";
+  };
+  row_count: number | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export type EmployeeExportInput = {
+  recipient_email: string;
+  search?: string;
+  country_code?: string;
+  job_title_id?: number;
+  sort_by?: "full_name" | "salary" | "hired_at" | "updated_at" | "employee_code";
+  sort_dir?: "asc" | "desc";
+};

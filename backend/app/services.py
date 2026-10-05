@@ -13,12 +13,11 @@ from .models import Country, Employee, JobTitle
 from .schemas import EmployeeCreate, EmployeeUpdate
 
 
-
-
 def _as_money(value) -> Decimal | None:
     if value is None:
         return None
     return Decimal(str(value)).quantize(Decimal("0.01"))
+
 
 SORT_COLUMNS = {
     "full_name": Employee.full_name,
@@ -27,6 +26,34 @@ SORT_COLUMNS = {
     "updated_at": Employee.updated_at,
     "employee_code": Employee.employee_code,
 }
+
+
+def employee_filter_clauses(
+    *,
+    search: str | None = None,
+    country_code: str | None = None,
+    job_title_id: int | None = None,
+    department: str | None = None,
+    employment_status: str | None = None,
+):
+    filters = [Employee.deleted_at.is_(None)]
+    if search:
+        term = f"%{search.strip()}%"
+        filters.append(or_(Employee.full_name.ilike(term), Employee.employee_code.ilike(term)))
+    if country_code:
+        filters.append(Employee.country_code == country_code.strip().upper())
+    if job_title_id:
+        filters.append(Employee.job_title_id == job_title_id)
+    if department:
+        filters.append(Employee.department == department.strip())
+    if employment_status:
+        filters.append(Employee.employment_status == employment_status.strip().lower())
+    return filters
+
+
+def employee_sort_clause(sort_by: str, sort_dir: str):
+    sort_column = SORT_COLUMNS.get(sort_by, Employee.full_name)
+    return desc(sort_column) if sort_dir == "desc" else asc(sort_column)
 
 
 def _require_country(db: Session, code: str) -> Country:
@@ -58,9 +85,7 @@ def create_employee(db: Session, data: EmployeeCreate) -> Employee:
 
 
 def get_employee(db: Session, employee_id: int) -> Employee:
-    employee = db.scalar(
-        select(Employee).where(Employee.id == employee_id, Employee.deleted_at.is_(None))
-    )
+    employee = db.scalar(select(Employee).where(Employee.id == employee_id, Employee.deleted_at.is_(None)))
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
     return employee
@@ -106,28 +131,21 @@ def list_employees(
     sort_by: str,
     sort_dir: str,
 ) -> dict:
-    filters = [Employee.deleted_at.is_(None)]
-    if search:
-        term = f"%{search.strip()}%"
-        filters.append(or_(Employee.full_name.ilike(term), Employee.employee_code.ilike(term)))
-    if country_code:
-        filters.append(Employee.country_code == country_code.strip().upper())
-    if job_title_id:
-        filters.append(Employee.job_title_id == job_title_id)
-    if department:
-        filters.append(Employee.department == department.strip())
-    if employment_status:
-        filters.append(Employee.employment_status == employment_status.strip().lower())
+    filters = employee_filter_clauses(
+        search=search,
+        country_code=country_code,
+        job_title_id=job_title_id,
+        department=department,
+        employment_status=employment_status,
+    )
 
     total_stmt = select(func.count()).select_from(Employee).where(*filters)
     total = int(db.scalar(total_stmt) or 0)
 
-    sort_column = SORT_COLUMNS.get(sort_by, Employee.full_name)
-    sort_clause = desc(sort_column) if sort_dir == "desc" else asc(sort_column)
     rows = db.scalars(
         select(Employee)
         .where(*filters)
-        .order_by(sort_clause, Employee.id.asc())
+        .order_by(employee_sort_clause(sort_by, sort_dir), Employee.id.asc())
         .offset((page - 1) * page_size)
         .limit(page_size)
     ).all()

@@ -20,8 +20,20 @@ from .auth import (
 )
 from .config import settings
 from .db import get_db
+from .employee_exports import create_export_job, get_export_job, mark_export_enqueue_failure
+from .export_queue import enqueue_employee_export
 from .models import Country, JobTitle
-from .schemas import CountryInsight, EmployeeCreate, EmployeeOut, EmployeeUpdate, JobTitleCountryInsight, PaginatedEmployees, ReferenceDataOut
+from .schemas import (
+    CountryInsight,
+    EmployeeCreate,
+    EmployeeExportOut,
+    EmployeeExportRequest,
+    EmployeeOut,
+    EmployeeUpdate,
+    JobTitleCountryInsight,
+    PaginatedEmployees,
+    ReferenceDataOut,
+)
 from .services import country_insights, create_employee, delete_employee, get_employee, job_title_country_insights, list_employees, update_employee
 
 
@@ -141,6 +153,37 @@ def update_employee_endpoint(employee_id: int, data: EmployeeUpdate, _user: Demo
 def delete_employee_endpoint(employee_id: int, _user: DemoUser = Depends(require_manager), db: Session = Depends(get_db)) -> Response:
     delete_employee(db, employee_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@app.post(
+    "/api/v1/exports/employees",
+    response_model=EmployeeExportOut,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def create_employee_export_endpoint(
+    data: EmployeeExportRequest,
+    user: DemoUser = Depends(require_manager),
+    db: Session = Depends(get_db),
+):
+    job = create_export_job(db, data, user)
+    try:
+        await enqueue_employee_export(job.id)
+    except Exception as exc:
+        mark_export_enqueue_failure(db, job)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The export could not be queued. Please try again.",
+        ) from exc
+    return job
+
+
+@app.get("/api/v1/exports/employees/{job_id}", response_model=EmployeeExportOut)
+def get_employee_export_endpoint(
+    job_id: str,
+    user: DemoUser = Depends(require_manager),
+    db: Session = Depends(get_db),
+):
+    return get_export_job(db, job_id, user)
 
 
 @app.get("/api/v1/insights/countries/{country_code}", response_model=CountryInsight)
