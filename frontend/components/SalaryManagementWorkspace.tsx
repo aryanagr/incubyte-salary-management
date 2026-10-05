@@ -6,7 +6,7 @@ export default function SalaryManagementWorkspace({ canManage }: { canManage: bo
   return (
     <div className={`role-boundary ${canManage ? "can-manage" : "read-only"}`}>
       {!canManage && <div className="readonly-banner">HR Staff view · read-only access</div>}
-      <SalaryManagementApp />
+      <SalaryManagementApp canManage={canManage} />
     </div>
   );
 }
