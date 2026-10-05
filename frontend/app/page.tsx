@@ -1,5 +1,5 @@
-import SalaryManagementApp from "@/components/SalaryManagementApp";
+import AuthenticatedApp from "@/components/AuthenticatedApp";
 
 export default function HomePage() {
-  return <SalaryManagementApp />;
+  return <AuthenticatedApp />;
 }
