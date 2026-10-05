@@ -1,3 +1,9 @@
+export type AuthUser = {
+  email: string;
+  name: string;
+  role: "hr_manager" | "hr";
+};
+
 export type Country = {
   code: string;
   name: string;
