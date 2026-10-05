@@ -51,7 +51,7 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/internal/bootstrap", include_in_schema=False)
+@app.post("/api/internal/bootstrap", include_in_schema=False)
 def bootstrap_endpoint(x_bootstrap_token: str | None = Header(default=None)) -> dict[str, int | float]:
     expected = os.getenv("BOOTSTRAP_TOKEN", "")
     if not expected:
