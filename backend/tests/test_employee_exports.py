@@ -1,8 +1,20 @@
+import asyncio
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.employee_exports import build_employee_export_csv, process_export_job_in_session
+from app.export_queue import enqueue_employee_export
 from app.models import EmployeeExportJob
+
+
+@pytest.fixture(autouse=True)
+def stub_export_queue(monkeypatch):
+    async def fake_enqueue(job_id: str) -> str:
+        return f"queue-message-{job_id}"
+
+    monkeypatch.setattr("app.main.enqueue_employee_export", fake_enqueue)
 
 
 def test_manager_can_queue_filtered_employee_export(client: TestClient):
@@ -155,3 +167,11 @@ def test_export_neutralizes_spreadsheet_formula_cells(client: TestClient, db: Se
     assert "'=CMD" in text
     assert "'=HYPERLINK" in text
     assert "'+SUM" in text
+
+
+def test_queue_fails_explicitly_when_runtime_is_unavailable(monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.delenv("VERCEL_QUEUE_BASE_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="queue is not configured"):
+        asyncio.run(enqueue_employee_export("job-123"))
