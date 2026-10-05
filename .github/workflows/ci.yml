@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -e ".[test,postgres]" pytest-cov
+      - run: pip install -e ".[test]" pytest-cov
       - run: pytest --cov=app --cov-fail-under=85
       - run: python -m compileall -q app
 
