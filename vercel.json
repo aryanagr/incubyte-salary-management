@@ -8,8 +8,7 @@
     "backend": {
       "root": "backend/",
       "framework": "fastapi",
-      "entrypoint": "main:app",
-      "buildCommand": "alembic upgrade head && python -m app.seed --count 10000"
+      "entrypoint": "main:app"
     }
   },
   "rewrites": [
