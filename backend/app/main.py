@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI, Query, Response, status
+import os
+import secrets
+
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .bootstrap import bootstrap_database
 from .config import settings
 from .db import get_db
 from .models import Country, JobTitle
@@ -45,6 +49,16 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.post("/internal/bootstrap", include_in_schema=False)
+def bootstrap_endpoint(x_bootstrap_token: str | None = Header(default=None)) -> dict[str, int | float]:
+    expected = os.getenv("BOOTSTRAP_TOKEN", "")
+    if not expected:
+        raise HTTPException(status_code=404, detail="Not found")
+    if not x_bootstrap_token or not secrets.compare_digest(x_bootstrap_token, expected):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return bootstrap_database()
 
 
 @app.get("/api/v1/reference-data", response_model=ReferenceDataOut)
