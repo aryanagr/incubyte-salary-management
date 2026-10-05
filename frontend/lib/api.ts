@@ -14,7 +14,7 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
-    credentials: "same-origin",
+    credentials: "include",
     headers: {
       Accept: "application/json",
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -36,6 +36,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Preserve stable generic error if body is not JSON.
     }
+
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined" &&
+      window.location.pathname !== "/login"
+    ) {
+      window.location.assign("/login");
+    }
+
     throw new ApiError(message, response.status);
   }
 
