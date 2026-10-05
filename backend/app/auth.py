@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass
 from typing import Literal
 
-from fastapi import Cookie, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, status
 
 SESSION_COOKIE = "salary_demo_session"
 SESSION_TTL_SECONDS = 8 * 60 * 60
@@ -103,9 +103,7 @@ def current_user(salary_demo_session: str | None = Cookie(default=None)) -> Demo
     return user
 
 
-def require_manager(user: DemoUser = None) -> DemoUser:
-    # FastAPI injects current_user in main.py via Depends(current_user), then
-    # passes the resolved user here explicitly when used as a dependency.
-    if user is None or user.role != "hr_manager":
+def require_manager(user: DemoUser = Depends(current_user)) -> DemoUser:
+    if user.role != "hr_manager":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="HR Manager permission required")
     return user
