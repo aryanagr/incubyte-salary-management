@@ -36,6 +36,15 @@ Deleted employees are excluded from every current insight.
 - Re-running the seed is intentionally **idempotent**: it restores the canonical seeded dataset instead of appending duplicates, including reactivating a previously soft-deleted seeded record.
 - Writes are batched and benchmarkable because seed performance is an explicit assessment concern.
 
+## Demo enhancement added after core scope
+The recruiter explicitly confirmed that production authentication was not required. After the core assessment was complete, a lightweight **demo login + two-role permission model** was added to make the deployed product easier to review without turning the assignment into an IAM project:
+- **HR Manager:** employee create/update/delete, directory access and salary analytics.
+- **HR Staff:** read-only directory access and salary analytics; mutation endpoints return `403`.
+- Authentication uses an HttpOnly, SameSite session cookie signed with a server-side secret in deployed environments.
+- Demo credentials are intentionally visible on the login page; this layer demonstrates product permissions, not production identity management.
+
+Production SSO, user provisioning, password storage/recovery, MFA and enterprise IAM remain deliberately out of scope.
+
 ## Key product/engineering decisions
 - Country and Job Title are controlled reference tables to prevent analytics fragmentation from spelling/case variants.
 - Unique employee code is the stable business identifier.
@@ -44,7 +53,7 @@ Deleted employees are excluded from every current insight.
 - Modular monolith: Next.js/React UI + FastAPI API; no microservices or cache without measured need.
 
 ## Deliberately out of scope
-- Authentication, SSO, RBAC or multiple user personas — recruiter confirmed a single trusted HR Manager is sufficient.
+- **Production** authentication/SSO/IAM, user provisioning, MFA and enterprise RBAC. The deployed demo login is intentionally lightweight and separate from the assessment's core scope.
 - Salary history/effective-dated compensation — optional, not needed for the assessment.
 - FX-rate ingestion or normalized cross-country reporting.
 - Full audit/event log, restore UI, approvals/workflows, payroll calculation, bonuses/equity/benefits.
@@ -58,3 +67,4 @@ Deleted employees are excluded from every current insight.
 5. Re-running the 10k seed does not increase row count and restores canonical seeded records.
 6. Tests cover CRUD, validation, analytics, deletion semantics and seeding; CI enforces the test/coverage gate.
 7. Repository documents architecture, trade-offs, deliberate exclusions, AI workflow and incremental Git history.
+8. Demo HR Staff cannot mutate employee records through either the UI or API; HR Manager retains full CRUD access.
