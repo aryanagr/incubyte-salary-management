@@ -46,8 +46,6 @@
 .workspace-error p { max-width: 480px; margin-bottom: 4px; }
 .auth-spinner { width: 30px; height: 30px; border-radius: 50%; border: 3px solid #dfe5e8; border-top-color: var(--accent); animation: auth-spin .8s linear infinite; }
 @keyframes auth-spin { to { transform: rotate(360deg); } }
-.role-boundary.read-only .topbar > .button.primary,
-.role-boundary.read-only .row-actions { display: none; }
 .readonly-banner { width: min(1440px, calc(100% - 40px)); margin: 36px auto -28px; display: inline-flex; border-radius: 999px; padding: 5px 9px; background: #eef4f6; color: #315360; font-size: 11px; font-weight: 800; }
 @media (max-width: 850px) {
   .login-shell { grid-template-columns: 1fr; }
