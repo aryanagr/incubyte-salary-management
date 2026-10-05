@@ -42,9 +42,18 @@ DEMO_USERS: dict[str, DemoUser] = {
 
 
 def _secret() -> bytes:
-    # Production receives AUTH_SECRET from Vercel. The fallback exists only so
-    # local development and tests remain self-contained.
-    return os.getenv("AUTH_SECRET", "local-development-only-secret").encode("utf-8")
+    configured = os.getenv("AUTH_SECRET")
+    if configured:
+        if os.getenv("VERCEL") == "1" and len(configured) < 32:
+            raise RuntimeError("AUTH_SECRET must be at least 32 characters in production")
+        return configured.encode("utf-8")
+
+    if os.getenv("VERCEL") == "1":
+        raise RuntimeError("AUTH_SECRET is required in production")
+
+    # Local development and tests stay self-contained without weakening the
+    # deployed environment, which must always provide its own secret.
+    return b"local-development-only-secret"
 
 
 def authenticate(email: str, password: str) -> DemoUser | None:
