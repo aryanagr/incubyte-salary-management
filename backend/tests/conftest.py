@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
+os.environ["AUTH_SECRET"] = "test-auth-secret"
 
 from app.db import Base, get_db  # noqa: E402
 from app.main import app  # noqa: E402
@@ -46,7 +47,7 @@ def db() -> Generator[Session, None, None]:
 
 
 @pytest.fixture()
-def client(db: Session) -> Generator[TestClient, None, None]:
+def raw_client(db: Session) -> Generator[TestClient, None, None]:
     def override_get_db() -> Generator[Session, None, None]:
         yield db
 
@@ -54,6 +55,16 @@ def client(db: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client(raw_client: TestClient) -> Generator[TestClient, None, None]:
+    response = raw_client.post(
+        "/api/v1/auth/login",
+        json={"email": "manager@salary.demo", "password": "Manager@123"},
+    )
+    assert response.status_code == 200
+    yield raw_client
 
 
 @pytest.fixture()
