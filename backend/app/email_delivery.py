@@ -7,15 +7,17 @@ import httpx
 
 
 RESEND_API_URL = "https://api.resend.com/emails"
-DEFAULT_FROM_EMAIL = "Compensation Console <onboarding@resend.dev>"
 
 
 def send_employee_export_email(*, job_id: str, recipient_email: str, csv_bytes: bytes, row_count: int) -> str:
     api_key = os.getenv("RESEND_API_KEY")
     if not api_key:
-        raise RuntimeError("Email delivery is not configured: RESEND_API_KEY is missing")
+        raise RuntimeError("Email delivery is not configured")
 
-    from_email = os.getenv("EXPORT_FROM_EMAIL", DEFAULT_FROM_EMAIL)
+    from_email = os.getenv("EXPORT_FROM_EMAIL")
+    if not from_email:
+        raise RuntimeError("Email sender is not configured")
+
     filename = f"employee-export-{job_id[:8]}.csv"
     payload = {
         "from": from_email,
