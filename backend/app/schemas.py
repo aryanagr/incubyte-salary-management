@@ -4,10 +4,11 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 EMPLOYMENT_STATUSES = {"active", "leave", "terminated"}
+EXPORT_STATUSES = {"queued", "processing", "sent", "failed"}
 
 
 def normalize_text(value: str) -> str:
@@ -184,3 +185,52 @@ class JobTitleCountryInsight(BaseModel):
 
 
 SortDirection = Literal["asc", "desc"]
+ExportStatus = Literal["queued", "processing", "sent", "failed"]
+ExportSortField = Literal["full_name", "salary", "hired_at", "updated_at", "employee_code"]
+
+
+class EmployeeExportRequest(BaseModel):
+    recipient_email: EmailStr
+    search: str | None = Field(default=None, max_length=160)
+    country_code: str | None = Field(default=None, min_length=2, max_length=2)
+    job_title_id: int | None = Field(default=None, gt=0)
+    sort_by: ExportSortField = "full_name"
+    sort_dir: SortDirection = "asc"
+
+    @field_validator("search", mode="before")
+    @classmethod
+    def normalize_search(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = normalize_text(value)
+        return normalized or None
+
+    @field_validator("country_code", mode="before")
+    @classmethod
+    def normalize_export_country(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        return normalized or None
+
+    def filter_snapshot(self) -> dict[str, str | int | None]:
+        return {
+            "search": self.search,
+            "country_code": self.country_code,
+            "job_title_id": self.job_title_id,
+            "sort_by": self.sort_by,
+            "sort_dir": self.sort_dir,
+        }
+
+
+class EmployeeExportOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    status: ExportStatus
+    recipient_email: EmailStr
+    filters: dict[str, str | int | None]
+    row_count: int | None
+    error_message: str | None
+    created_at: datetime
+    completed_at: datetime | None
