@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import os
-import secrets
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -19,7 +18,6 @@ from .auth import (
     current_user,
     require_manager,
 )
-from .bootstrap import bootstrap_database
 from .config import settings
 from .db import get_db
 from .models import Country, JobTitle
@@ -51,26 +49,6 @@ app.add_middleware(
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
-
-
-def _run_bootstrap_if_authorized(token: str | None) -> dict[str, int | float]:
-    expected = os.getenv("BOOTSTRAP_TOKEN", "")
-    if not expected:
-        raise HTTPException(status_code=404, detail="Not found")
-    if not token or not secrets.compare_digest(token, expected):
-        raise HTTPException(status_code=403, detail="Forbidden")
-    return bootstrap_database()
-
-
-@app.post("/api/internal/bootstrap", include_in_schema=False)
-def bootstrap_endpoint(x_bootstrap_token: str | None = Header(default=None)) -> dict[str, int | float]:
-    return _run_bootstrap_if_authorized(x_bootstrap_token)
-
-
-@app.get("/api/internal/bootstrap-once", include_in_schema=False)
-def bootstrap_once_endpoint(token: str | None = Query(default=None)) -> dict[str, int | float]:
-    # Temporary release hook: removed immediately after Neon initialization.
-    return _run_bootstrap_if_authorized(token)
 
 
 @app.post("/api/v1/auth/login", response_model=AuthUserOut)
