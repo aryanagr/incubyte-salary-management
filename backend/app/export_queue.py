@@ -9,11 +9,12 @@ EXPORT_TOPIC = "employee-exports"
 
 
 async def enqueue_employee_export(job_id: str) -> str | None:
-    # Tests and plain local Python runs do not have Vercel queue credentials.
-    # `vercel dev` injects VERCEL_QUEUE_BASE_URL / token, while deployed
-    # functions expose VERCEL=1 and OIDC-backed queue authentication.
+    # `vercel dev` injects queue credentials and deployed functions receive
+    # OIDC-backed queue authentication. Outside those environments, failing
+    # explicitly is safer than claiming a job was queued when no worker can
+    # ever consume it.
     if os.getenv("VERCEL") != "1" and not os.getenv("VERCEL_QUEUE_BASE_URL"):
-        return None
+        raise RuntimeError("Employee export queue is not configured")
 
     return await send(
         EXPORT_TOPIC,
