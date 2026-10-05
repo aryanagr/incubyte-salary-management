@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import EmployeeExportDialog from "@/components/EmployeeExportDialog";
 import {
   createEmployee,
   deleteEmployee,
@@ -182,7 +183,7 @@ function EmployeeDetail({ employee, onClose }: { employee: Employee; onClose: ()
   );
 }
 
-export default function SalaryManagementApp() {
+export default function SalaryManagementApp({ canManage }: { canManage: boolean }) {
   const [reference, setReference] = useState<ReferenceData | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [total, setTotal] = useState(0);
@@ -199,6 +200,7 @@ export default function SalaryManagementApp() {
   const [insight, setInsight] = useState<CountryInsight | null>(null);
   const [formEmployee, setFormEmployee] = useState<Employee | "new" | null>(null);
   const [detailEmployee, setDetailEmployee] = useState<Employee | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
   const employeeRequestId = useRef(0);
 
@@ -258,6 +260,14 @@ export default function SalaryManagementApp() {
     () => reference?.countries.find((item) => item.code === insightCountry)?.currency_code ?? "USD",
     [insightCountry, reference],
   );
+  const filterCountryLabel = useMemo(
+    () => reference?.countries.find((item) => item.code === filterCountry)?.name ?? "All countries",
+    [filterCountry, reference],
+  );
+  const jobTitleLabel = useMemo(
+    () => reference?.job_titles.find((item) => String(item.id) === jobTitle)?.name ?? "All job titles",
+    [jobTitle, reference],
+  );
 
   function refreshAfterMutation() {
     setFormEmployee(null);
@@ -266,6 +276,7 @@ export default function SalaryManagementApp() {
   }
 
   async function remove(employee: Employee) {
+    if (!canManage) return;
     if (!window.confirm(`Remove ${employee.full_name} from the current directory? The record will be retained for traceability.`)) return;
     try {
       await deleteEmployee(employee.id);
@@ -277,15 +288,17 @@ export default function SalaryManagementApp() {
     }
   }
 
+  const columnCount = canManage ? 6 : 5;
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <div>
           <p className="brand-kicker">People Operations</p>
           <h1>Compensation Console</h1>
-          <p className="subtitle">Manage employee records and inspect compensation patterns without spreadsheet exports.</p>
+          <p className="subtitle">Manage employee records, inspect compensation patterns and securely export filtered results.</p>
         </div>
-        <button className="button primary" onClick={() => setFormEmployee("new")} disabled={!reference}>+ Add employee</button>
+        {canManage && <button className="button primary" onClick={() => setFormEmployee("new")} disabled={!reference}>+ Add employee</button>}
       </header>
 
       <section className="insights-section" aria-labelledby="insights-title">
@@ -327,6 +340,18 @@ export default function SalaryManagementApp() {
       <section className="employees-section" aria-labelledby="employees-title">
         <div className="section-heading">
           <div><p className="eyebrow">Directory</p><h2 id="employees-title">Employees <span className="count-badge">{total.toLocaleString()}</span></h2></div>
+          <div className="directory-heading-actions">
+            <span className="directory-refresh-state" aria-live="polite">{loading && employees.length > 0 ? "Updating…" : ""}</span>
+            {canManage && (
+              <button
+                className="button secondary"
+                onClick={() => setExportOpen(true)}
+                disabled={!reference || loading}
+              >
+                Email filtered CSV
+              </button>
+            )}
+          </div>
         </div>
         <div className="toolbar">
           <input className="search-input" aria-label="Search employees" placeholder="Search name or employee code" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
@@ -344,7 +369,12 @@ export default function SalaryManagementApp() {
         {error && <div className="error-banner" role="alert">{error}<button onClick={() => void loadEmployees()}>Retry</button></div>}
         <div className="table-wrap" aria-busy={loading}>
           <table>
-            <thead><tr><th>Employee</th><th>Role</th><th>Country</th><th>Salary</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Employee</th><th>Role</th><th>Country</th><th>Salary</th><th>Status</th>
+                {canManage && <th><span className="sr-only">Actions</span></th>}
+              </tr>
+            </thead>
             <tbody>
               {employees.map((employee) => (
                 <tr key={employee.id}>
@@ -353,11 +383,13 @@ export default function SalaryManagementApp() {
                   <td>{employee.country.name}</td>
                   <td className="salary-cell">{money(employee.salary, employee.country.currency_code)}</td>
                   <td><span className={`status-chip ${employee.employment_status}`}>{employee.employment_status}</span></td>
-                  <td><div className="row-actions"><button onClick={() => setFormEmployee(employee)}>Edit</button><button className="danger-link" onClick={() => void remove(employee)}>Delete</button></div></td>
+                  {canManage && (
+                    <td><div className="row-actions"><button onClick={() => setFormEmployee(employee)}>Edit</button><button className="danger-link" onClick={() => void remove(employee)}>Delete</button></div></td>
+                  )}
                 </tr>
               ))}
-              {loading && employees.length === 0 && <tr><td colSpan={6} className="state-cell">Loading employees…</td></tr>}
-              {!loading && employees.length === 0 && <tr><td colSpan={6} className="state-cell">No employees match these filters.</td></tr>}
+              {loading && employees.length === 0 && <tr><td colSpan={columnCount} className="state-cell">Loading employees…</td></tr>}
+              {!loading && employees.length === 0 && <tr><td colSpan={columnCount} className="state-cell">No employees match these filters.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -367,7 +399,7 @@ export default function SalaryManagementApp() {
         </div>
       </section>
 
-      {reference && formEmployee && (
+      {canManage && reference && formEmployee && (
         <EmployeeForm
           reference={reference}
           initial={formEmployee === "new" ? undefined : formEmployee}
@@ -376,6 +408,20 @@ export default function SalaryManagementApp() {
         />
       )}
       {detailEmployee && <EmployeeDetail employee={detailEmployee} onClose={() => setDetailEmployee(null)} />}
+      {canManage && exportOpen && (
+        <EmployeeExportDialog
+          resultCount={total}
+          filters={{
+            search: debouncedSearch,
+            countryCode: filterCountry,
+            countryLabel: filterCountryLabel,
+            jobTitleId: jobTitle ? Number(jobTitle) : undefined,
+            jobTitleLabel,
+            sortDir,
+          }}
+          onClose={() => setExportOpen(false)}
+        />
+      )}
     </main>
   );
 }
