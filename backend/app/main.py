@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import os
 import secrets
+from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .auth import (
+    SESSION_COOKIE,
+    SESSION_TTL_SECONDS,
+    DemoUser,
+    authenticate,
+    create_session_token,
+    current_user,
+    require_manager,
+)
 from .bootstrap import bootstrap_database
 from .config import settings
 from .db import get_db
@@ -30,6 +41,18 @@ from .services import (
     list_employees,
     update_employee,
 )
+
+
+class LoginIn(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class AuthUserOut(BaseModel):
+    email: str
+    name: str
+    role: Literal["hr_manager", "hr"]
+
 
 app = FastAPI(
     title="Salary Management API",
@@ -61,8 +84,40 @@ def bootstrap_endpoint(x_bootstrap_token: str | None = Header(default=None)) -> 
     return bootstrap_database()
 
 
+@app.post("/api/v1/auth/login", response_model=AuthUserOut)
+def login(data: LoginIn, response: Response) -> DemoUser:
+    user = authenticate(str(data.email), data.password)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=create_session_token(user),
+        max_age=SESSION_TTL_SECONDS,
+        httponly=True,
+        secure=os.getenv("VERCEL") == "1",
+        samesite="lax",
+        path="/",
+    )
+    return user
+
+
+@app.get("/api/v1/auth/me", response_model=AuthUserOut)
+def me(user: DemoUser = Depends(current_user)) -> DemoUser:
+    return user
+
+
+@app.post("/api/v1/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(response: Response) -> Response:
+    response.delete_cookie(key=SESSION_COOKIE, path="/")
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
 @app.get("/api/v1/reference-data", response_model=ReferenceDataOut)
-def reference_data(db: Session = Depends(get_db)) -> dict:
+def reference_data(
+    _user: DemoUser = Depends(current_user),
+    db: Session = Depends(get_db),
+) -> dict:
     return {
         "countries": db.scalars(select(Country).order_by(Country.name)).all(),
         "job_titles": db.scalars(select(JobTitle).order_by(JobTitle.name)).all(),
@@ -71,7 +126,11 @@ def reference_data(db: Session = Depends(get_db)) -> dict:
 
 
 @app.post("/api/v1/employees", response_model=EmployeeOut, status_code=status.HTTP_201_CREATED)
-def create_employee_endpoint(data: EmployeeCreate, db: Session = Depends(get_db)):
+def create_employee_endpoint(
+    data: EmployeeCreate,
+    _user: DemoUser = Depends(require_manager),
+    db: Session = Depends(get_db),
+):
     return create_employee(db, data)
 
 
@@ -86,6 +145,7 @@ def list_employees_endpoint(
     employment_status: str | None = Query(None, pattern="^(active|leave|terminated)$"),
     sort_by: str = Query("full_name", pattern="^(full_name|salary|hired_at|updated_at|employee_code)$"),
     sort_dir: str = Query("asc", pattern="^(asc|desc)$"),
+    _user: DemoUser = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     return list_employees(
@@ -103,23 +163,40 @@ def list_employees_endpoint(
 
 
 @app.get("/api/v1/employees/{employee_id}", response_model=EmployeeOut)
-def get_employee_endpoint(employee_id: int, db: Session = Depends(get_db)):
+def get_employee_endpoint(
+    employee_id: int,
+    _user: DemoUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     return get_employee(db, employee_id)
 
 
 @app.patch("/api/v1/employees/{employee_id}", response_model=EmployeeOut)
-def update_employee_endpoint(employee_id: int, data: EmployeeUpdate, db: Session = Depends(get_db)):
+def update_employee_endpoint(
+    employee_id: int,
+    data: EmployeeUpdate,
+    _user: DemoUser = Depends(require_manager),
+    db: Session = Depends(get_db),
+):
     return update_employee(db, employee_id, data)
 
 
 @app.delete("/api/v1/employees/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_employee_endpoint(employee_id: int, db: Session = Depends(get_db)) -> Response:
+def delete_employee_endpoint(
+    employee_id: int,
+    _user: DemoUser = Depends(require_manager),
+    db: Session = Depends(get_db),
+) -> Response:
     delete_employee(db, employee_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.get("/api/v1/insights/countries/{country_code}", response_model=CountryInsight)
-def country_insights_endpoint(country_code: str, db: Session = Depends(get_db)):
+def country_insights_endpoint(
+    country_code: str,
+    _user: DemoUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     return country_insights(db, country_code)
 
 
@@ -127,5 +204,10 @@ def country_insights_endpoint(country_code: str, db: Session = Depends(get_db)):
     "/api/v1/insights/countries/{country_code}/job-titles/{job_title_id}",
     response_model=JobTitleCountryInsight,
 )
-def job_title_country_insights_endpoint(country_code: str, job_title_id: int, db: Session = Depends(get_db)):
+def job_title_country_insights_endpoint(
+    country_code: str,
+    job_title_id: int,
+    _user: DemoUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
     return job_title_country_insights(db, country_code, job_title_id)
