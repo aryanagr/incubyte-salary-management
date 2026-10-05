@@ -3,10 +3,10 @@ from __future__ import annotations
 import os
 from typing import Literal
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from .auth import (
@@ -40,15 +40,31 @@ app = FastAPI(title="Salary Management API", version="1.0.0", docs_url="/api/doc
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Accept"],
 )
 
 
+@app.middleware("http")
+async def protect_sensitive_api_responses(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/api/v1/"):
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return response
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/health/ready")
+def readiness(db: Session = Depends(get_db)) -> dict[str, str]:
+    db.execute(text("SELECT 1"))
+    return {"status": "ready"}
 
 
 @app.post("/api/v1/auth/login", response_model=AuthUserOut)
