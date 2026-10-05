@@ -44,7 +44,7 @@ The application is a modular monolith rather than a distributed system: at 10k e
 - Backend: **21 tests passing** after recruiter-clarification regression coverage.
 - Backend coverage: **89.81%**, enforced at >=85%.
 - Latest fresh-db 10k seed regression: **2.942s first run / 2.774s repeat** on the assessment environment; rerun remains exactly 10,000 physical/current fixture employees.
-- Frontend TS/TSX syntax passes local transpilation; full Next.js typecheck/build and browser smoke remain deployment gates because package installation is unavailable in this sandbox.
+- GitHub Actions now verifies `npm install`, `npm run typecheck`, and the production `npm run build` successfully for the final `master` revision; deployed browser smoke testing remains a release gate.
 - Frontend dependency pins were updated to the current security baseline: Next.js 16.3.8 and React/React DOM 19.3.0.
 
 ## Local backend
