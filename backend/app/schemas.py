@@ -37,7 +37,12 @@ class EmployeeBase(BaseModel):
     employment_status: str = "active"
     hired_at: date | None = None
 
-    @field_validator("employee_code", "full_name", "department", mode="before")
+    @field_validator("employee_code", mode="before")
+    @classmethod
+    def normalize_employee_code(cls, value: str) -> str:
+        return normalize_text(value).upper()
+
+    @field_validator("full_name", "department", mode="before")
     @classmethod
     def trim_text(cls, value: str) -> str:
         return normalize_text(value)
@@ -75,7 +80,12 @@ class EmployeeUpdate(BaseModel):
     employment_status: str | None = None
     hired_at: date | None = None
 
-    @field_validator("employee_code", "full_name", "department", mode="before")
+    @field_validator("employee_code", mode="before")
+    @classmethod
+    def normalize_optional_employee_code(cls, value: str | None) -> str | None:
+        return None if value is None else normalize_text(value).upper()
+
+    @field_validator("full_name", "department", mode="before")
     @classmethod
     def trim_optional_text(cls, value: str | None) -> str | None:
         return None if value is None else normalize_text(value)
