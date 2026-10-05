@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createEmployee,
   deleteEmployee,
@@ -200,8 +200,10 @@ export default function SalaryManagementApp() {
   const [formEmployee, setFormEmployee] = useState<Employee | "new" | null>(null);
   const [detailEmployee, setDetailEmployee] = useState<Employee | null>(null);
   const [dataVersion, setDataVersion] = useState(0);
+  const employeeRequestId = useRef(0);
 
   const loadEmployees = useCallback(async () => {
+    const requestId = ++employeeRequestId.current;
     setLoading(true);
     setError("");
     try {
@@ -214,13 +216,15 @@ export default function SalaryManagementApp() {
         sort_by: "full_name",
         sort_dir: sortDir,
       });
+      if (requestId !== employeeRequestId.current) return;
       setEmployees(result.items);
       setTotal(result.total);
       setPages(result.pages);
     } catch (err) {
+      if (requestId !== employeeRequestId.current) return;
       setError(err instanceof Error ? err.message : "Could not load employees");
     } finally {
-      setLoading(false);
+      if (requestId === employeeRequestId.current) setLoading(false);
     }
   }, [debouncedSearch, filterCountry, jobTitle, page, sortDir]);
 
@@ -338,11 +342,11 @@ export default function SalaryManagementApp() {
         </div>
 
         {error && <div className="error-banner" role="alert">{error}<button onClick={() => void loadEmployees()}>Retry</button></div>}
-        <div className="table-wrap">
+        <div className="table-wrap" aria-busy={loading}>
           <table>
             <thead><tr><th>Employee</th><th>Role</th><th>Country</th><th>Salary</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              {!loading && employees.map((employee) => (
+              {employees.map((employee) => (
                 <tr key={employee.id}>
                   <td><button className="employee-link" onClick={() => setDetailEmployee(employee)}><strong>{employee.full_name}</strong><span>{employee.employee_code}</span></button></td>
                   <td><strong>{employee.job_title.name}</strong><span className="table-sub">{employee.department}</span></td>
@@ -352,7 +356,7 @@ export default function SalaryManagementApp() {
                   <td><div className="row-actions"><button onClick={() => setFormEmployee(employee)}>Edit</button><button className="danger-link" onClick={() => void remove(employee)}>Delete</button></div></td>
                 </tr>
               ))}
-              {loading && <tr><td colSpan={6} className="state-cell">Loading employees…</td></tr>}
+              {loading && employees.length === 0 && <tr><td colSpan={6} className="state-cell">Loading employees…</td></tr>}
               {!loading && employees.length === 0 && <tr><td colSpan={6} className="state-cell">No employees match these filters.</td></tr>}
             </tbody>
           </table>
