@@ -153,6 +153,50 @@ def send_export_email(*, recipient_email: str, xlsx_bytes: bytes, row_count: int
         smtp.send_message(message)
 
 
+def process_export_job(db: Session, job: ExportJob) -> str:
+    """Process one queued export and persist its terminal/retry state.
+
+    Returns one of: sent, retried, failed, skipped.
+    """
+    if job.status != "queued" or job.attempts >= MAX_EXPORT_ATTEMPTS:
+        return "skipped"
+
+    job.status = "processing"
+    job.attempts += 1
+    job.started_at = datetime.now(timezone.utc)
+    job.last_error = None
+    db.commit()
+
+    try:
+        xlsx_bytes, row_count = build_export_workbook(db, job)
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        filename = f"employee-export-{timestamp}.xlsx"
+        send_export_email(
+            recipient_email=job.recipient_email,
+            xlsx_bytes=xlsx_bytes,
+            row_count=row_count,
+            filename=filename,
+        )
+        job.status = "sent"
+        job.row_count = row_count
+        job.completed_at = datetime.now(timezone.utc)
+        result = "sent"
+    except Exception as exc:  # worker boundary: persist failure instead of losing the job
+        job.last_error = str(exc)[:2000]
+        if job.attempts < MAX_EXPORT_ATTEMPTS:
+            job.status = "queued"
+            result = "retried"
+        else:
+            job.status = "failed"
+            job.completed_at = datetime.now(timezone.utc)
+            result = "failed"
+    finally:
+        db.commit()
+        db.refresh(job)
+
+    return result
+
+
 def process_export_jobs(db: Session, *, limit: int = 3) -> dict[str, int]:
     jobs = db.scalars(
         select(ExportJob)
@@ -166,36 +210,12 @@ def process_export_jobs(db: Session, *, limit: int = 3) -> dict[str, int]:
     retried = 0
 
     for job in jobs:
-        job.status = "processing"
-        job.attempts += 1
-        job.started_at = datetime.now(timezone.utc)
-        job.last_error = None
-        db.commit()
-
-        try:
-            xlsx_bytes, row_count = build_export_workbook(db, job)
-            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-            filename = f"employee-export-{timestamp}.xlsx"
-            send_export_email(
-                recipient_email=job.recipient_email,
-                xlsx_bytes=xlsx_bytes,
-                row_count=row_count,
-                filename=filename,
-            )
-            job.status = "sent"
-            job.row_count = row_count
-            job.completed_at = datetime.now(timezone.utc)
+        result = process_export_job(db, job)
+        if result == "sent":
             sent += 1
-        except Exception as exc:  # worker boundary: persist failure instead of losing the job
-            job.last_error = str(exc)[:2000]
-            if job.attempts < MAX_EXPORT_ATTEMPTS:
-                job.status = "queued"
-                retried += 1
-            else:
-                job.status = "failed"
-                job.completed_at = datetime.now(timezone.utc)
-                failed += 1
-        finally:
-            db.commit()
+        elif result == "failed":
+            failed += 1
+        elif result == "retried":
+            retried += 1
 
     return {"processed": len(jobs), "sent": sent, "retried": retried, "failed": failed}
