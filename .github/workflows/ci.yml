@@ -16,8 +16,15 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -e ".[test]" pytest-cov
-      - run: pytest --cov=app --cov-fail-under=85
+      - run: pip install -e ".[test]" pytest-cov ruff pip-audit
+      - name: Python lint
+        run: ruff check app tests --select E4,E7,E9,F
+      - name: Python dependency vulnerability audit
+        run: pip-audit --skip-editable
+      - name: Backend tests and coverage
+        run: pytest -m "not performance" --cov=app --cov-fail-under=85
+      - name: 10k employee performance regression gate
+        run: pytest -m performance tests/test_performance.py
       - run: python -m compileall -q app
 
   frontend:
@@ -33,5 +40,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package.json
       - run: npm install
+      - name: Frontend dependency vulnerability audit
+        run: npm audit --omit=dev --audit-level=high
       - run: npm run typecheck
       - run: npm run build
