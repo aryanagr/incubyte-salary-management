@@ -21,7 +21,7 @@ from .auth import (
 )
 from .config import settings
 from .db import get_db
-from .exports import create_export_job, get_export_job, process_export_jobs
+from .exports import create_export_job, get_export_job, process_export_job, process_export_jobs
 from .models import Country, JobTitle
 from .schemas import (
     CountryInsight,
@@ -166,11 +166,7 @@ def job_title_country_insights_endpoint(country_code: str, job_title_id: int, _u
 
 
 @app.post("/api/v1/exports", response_model=ExportJobOut, status_code=status.HTTP_202_ACCEPTED)
-def queue_export_endpoint(
-    data: ExportCreate,
-    user: DemoUser = Depends(current_user),
-    db: Session = Depends(get_db),
-):
+def queue_export_endpoint(data: ExportCreate, user: DemoUser = Depends(current_user), db: Session = Depends(get_db)):
     return create_export_job(
         db,
         user=user,
@@ -190,6 +186,15 @@ def export_status_endpoint(job_id: int, user: DemoUser = Depends(current_user), 
     job = get_export_job(db, job_id=job_id, user=user)
     if not job:
         raise HTTPException(status_code=404, detail="Export job not found")
+    return job
+
+
+@app.post("/api/v1/exports/{job_id}/dispatch", response_model=ExportJobOut)
+def dispatch_export_endpoint(job_id: int, user: DemoUser = Depends(current_user), db: Session = Depends(get_db)):
+    job = get_export_job(db, job_id=job_id, user=user)
+    if not job:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    process_export_job(db, job)
     return job
 
 
