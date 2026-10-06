@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, Numeric, String, func
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -56,3 +56,31 @@ class Employee(Base):
 
     country: Mapped[Country] = relationship(back_populates="employees", lazy="joined")
     job_title: Mapped[JobTitle] = relationship(back_populates="employees", lazy="joined")
+
+
+class ExportJob(Base):
+    __tablename__ = "export_jobs"
+    __table_args__ = (
+        Index("ix_export_jobs_status_created", "status", "created_at"),
+        Index("ix_export_jobs_requested_by", "requested_by_email", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    requested_by_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    recipient_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    search: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    country_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    job_title_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    department: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    employment_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sort_by: Mapped[str] = mapped_column(String(32), nullable=False, default="full_name")
+    sort_dir: Mapped[str] = mapped_column(String(4), nullable=False, default="asc")
+
+    row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
