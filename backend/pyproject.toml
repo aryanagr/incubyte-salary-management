@@ -20,6 +20,9 @@ test = ["pytest>=9,<10", "httpx>=0.28,<1"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+  "performance: bounded 10k-row regression checks; CI timing is not a production SLA",
+]
 
 [build-system]
 requires = ["setuptools>=75"]
