@@ -1,7 +1,9 @@
-# Async Filtered Employee Export
+# Optional Post-Core Enhancement — Async Filtered Employee Export
+
+> **Scope:** this feature was added after the clarified Incubyte assessment requirements were already satisfied. It demonstrates an extension path for reporting/async work; it is not presented as part of the original required scope. Core assessment sign-off does not depend on live SMTP delivery.
 
 ## Product intent
-HR can export the employee directory using the **exact search, country, job-title and sort state active when the request is queued**. The export contains all matching rows, not only the current pagination page, and is emailed as an `.xlsx` workbook.
+HR can export the employee directory using the **exact search, country, job-title and sort state active when the request is queued**. The export contains all matching rows, not only the current pagination page, and can be emailed as an `.xlsx` workbook.
 
 The request is intentionally asynchronous so generating a report and contacting a mail provider never blocks directory browsing.
 
@@ -80,7 +82,7 @@ This prevents later UI changes from altering an already-requested report.
 - Employee exports are intentionally marked `no-store` through the existing API cache policy.
 
 ## Mail provider configuration
-The implementation is SMTP-provider-neutral. Production delivery requires:
+The implementation is SMTP-provider-neutral. Live delivery requires:
 
 ```text
 SMTP_HOST
@@ -106,6 +108,9 @@ Automated tests cover:
 - export authentication;
 - requester ownership boundary;
 - cron-secret authorization.
+
+## Enhancement UAT status
+The job lifecycle, workbook generation and mail transport behavior are automated with provider mocking. A real mailbox delivery test requires SMTP credentials and remains useful enhancement UAT, but it is **not part of the original Incubyte acceptance criteria**.
 
 ## Production extension path
 At higher export volume, replace the DB polling/HTTP worker with a managed durable queue while preserving the existing `ExportJob` domain contract. For large datasets, stream rows and store generated files in object storage with expiring links rather than attaching large workbooks directly to email.
