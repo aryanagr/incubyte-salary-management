@@ -102,6 +102,13 @@ export function queueExport(input: ExportRequest) {
   });
 }
 
+export function dispatchExport(id: number) {
+  return request<ExportJob>(`/api/v1/exports/${id}/dispatch`, {
+    method: "POST",
+    keepalive: true,
+  });
+}
+
 export function getExportJob(id: number) {
   return request<ExportJob>(`/api/v1/exports/${id}`);
 }
