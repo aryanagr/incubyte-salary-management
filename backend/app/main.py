@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
@@ -20,8 +21,19 @@ from .auth import (
 )
 from .config import settings
 from .db import get_db
+from .exports import create_export_job, get_export_job, process_export_jobs
 from .models import Country, JobTitle
-from .schemas import CountryInsight, EmployeeCreate, EmployeeOut, EmployeeUpdate, JobTitleCountryInsight, PaginatedEmployees, ReferenceDataOut
+from .schemas import (
+    CountryInsight,
+    EmployeeCreate,
+    EmployeeOut,
+    EmployeeUpdate,
+    ExportCreate,
+    ExportJobOut,
+    JobTitleCountryInsight,
+    PaginatedEmployees,
+    ReferenceDataOut,
+)
 from .services import country_insights, create_employee, delete_employee, get_employee, job_title_country_insights, list_employees, update_employee
 
 
@@ -151,3 +163,40 @@ def country_insights_endpoint(country_code: str, _user: DemoUser = Depends(curre
 @app.get("/api/v1/insights/countries/{country_code}/job-titles/{job_title_id}", response_model=JobTitleCountryInsight)
 def job_title_country_insights_endpoint(country_code: str, job_title_id: int, _user: DemoUser = Depends(current_user), db: Session = Depends(get_db)):
     return job_title_country_insights(db, country_code, job_title_id)
+
+
+@app.post("/api/v1/exports", response_model=ExportJobOut, status_code=status.HTTP_202_ACCEPTED)
+def queue_export_endpoint(
+    data: ExportCreate,
+    user: DemoUser = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    return create_export_job(
+        db,
+        user=user,
+        recipient_email=str(data.recipient_email),
+        search=data.search,
+        country_code=data.country_code,
+        job_title_id=data.job_title_id,
+        department=data.department,
+        employment_status=data.employment_status,
+        sort_by=data.sort_by,
+        sort_dir=data.sort_dir,
+    )
+
+
+@app.get("/api/v1/exports/{job_id}", response_model=ExportJobOut)
+def export_status_endpoint(job_id: int, user: DemoUser = Depends(current_user), db: Session = Depends(get_db)):
+    job = get_export_job(db, job_id=job_id, user=user)
+    if not job:
+        raise HTTPException(status_code=404, detail="Export job not found")
+    return job
+
+
+@app.get("/api/internal/export-jobs/process")
+def process_exports_endpoint(request: Request, db: Session = Depends(get_db)) -> dict[str, int]:
+    cron_secret = os.getenv("CRON_SECRET", "")
+    authorization = request.headers.get("authorization", "")
+    if not cron_secret or not secrets.compare_digest(authorization, f"Bearer {cron_secret}"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    return process_export_jobs(db)
