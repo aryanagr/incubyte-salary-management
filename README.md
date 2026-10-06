@@ -1,29 +1,78 @@
 # Compensation Console — Incubyte Engineering Assessment
 
-A production-minded salary-management workspace for an HR team managing roughly 10,000 employees. The solution emphasizes product reasoning, TDD, explicit trade-offs, deterministic high-volume seeding and an auditable AI-assisted engineering process.
+A production-minded salary-management workspace for an HR team managing roughly 10,000 employees.
+
+The submission is intentionally optimized for the qualities called out in the assessment: **clear reasoning, proportional architecture, maintainable code, meaningful tests, product judgment, incremental delivery, and transparent AI-assisted development**.
+
+## Reviewer quick path
+
+If you have only a few minutes, review these in order:
+
+1. `docs/00-ASSESSMENT_ANALYSIS.md` — decomposition of the brief, assumptions, edge cases and questions sent before implementation.
+2. `docs/01-PRODUCT_REQUIREMENTS.md` — final one-page product scope after recruiter clarification.
+3. `docs/02-ARCHITECTURE.md` + `docs/05-TRADEOFFS.md` — architecture and deliberate simplicity decisions.
+4. `docs/07-REQUIREMENTS_TRACEABILITY.md` — requirement-to-code-to-test mapping.
+5. `docs/14-FINAL_REQUIREMENTS_SIGNOFF.md` — current completion/evidence matrix.
+
+The Git history intentionally preserves tests, implementation, review findings and subsequent fixes rather than presenting one generated final commit.
+
+## Core assessment scope — complete
+
+The following capabilities are the submission's **core assessment** and are the basis on which the project should be evaluated:
+
+- employee add, view, update and delete flows;
+- annual gross base salary with associated local currency;
+- server-side search, filtering, sorting and pagination for ~10,000 employees;
+- country salary insights: headcount, min/max/average salary and total payroll;
+- average salary for a job title within a country;
+- relational persistence using PostgreSQL/Neon with Alembic migrations;
+- deterministic, idempotent 10,000-employee seed using repository-owned first/last-name datasets;
+- bulk seeding and explicit performance verification;
+- FastAPI backend + Next.js/React/TypeScript frontend;
+- requirement-derived automated tests and enforced CI quality gates;
+- documented architecture, trade-offs, AI workflow, code review and QA evidence.
+
+### Deliberate core-scope exclusions
+
+The project intentionally does **not** add speculative infrastructure just to appear more complex. For the stated scale, the following were rejected or deferred unless a real requirement emerges:
+
+- microservices;
+- Kafka/event streaming;
+- Redis as a required cache/queue layer;
+- Elasticsearch;
+- FX conversion without a specified market-data source/as-of policy;
+- compensation history beyond current salary;
+- payroll/tax calculation;
+- enterprise SSO/MFA/user provisioning.
+
+At ~10,000 employees, a modular monolith with indexed PostgreSQL queries is simpler to operate and sufficient for the product requirements.
+
+## Optional post-core enhancements
+
+These features were added **after the clarified core assessment was already satisfied**. They demonstrate extension points and additional engineering judgment; they are **not presented as requirements Incubyte asked for**.
+
+### Demo authentication / RBAC
+
+The recruiter explicitly confirmed production authentication was not required. A lightweight demo layer was added later so reviewers can exercise two permission levels without introducing an external identity provider:
+
+| Role | Email | Password | Demo permission |
+| --- | --- | --- | --- |
+| HR Manager | `manager@salary.demo` | `Manager@123` | Employee CRUD + directory + analytics + reports |
+| HR Staff | `hr@salary.demo` | `Hr@123` | Read-only directory + analytics + reports |
+
+The API enforces the write boundary; this is still intentionally **demo RBAC, not production IAM**. See `docs/15-DEMO_AUTH_RBAC.md`.
+
+### Asynchronous filtered export
+
+A later enhancement adds a durable PostgreSQL-backed export job that snapshots the current employee-directory filters, generates an `.xlsx`, and supports asynchronous email delivery. It deliberately avoids Redis/Celery at this workload size and documents retry/concurrency semantics.
+
+Live SMTP delivery requires provider credentials and is treated as enhancement UAT, **not as a blocker for the original salary-management assessment**. See `docs/16-ASYNC_FILTERED_EXPORT.md`.
 
 ## Live demo
-Production: https://incubyte-salary-management-chi.vercel.app
 
-The deployed demo includes two intentionally public test personas:
+Production URL: https://incubyte-salary-management-chi.vercel.app
 
-| Role | Email | Password | Permission |
-| --- | --- | --- | --- |
-| HR Manager | `manager@salary.demo` | `Manager@123` | Full employee CRUD + directory + salary analytics |
-| HR Staff | `hr@salary.demo` | `Hr@123` | Read-only directory + salary analytics |
-
-The demo credentials are deliberately visible so reviewers can switch roles. The backend still enforces the permission boundary: HR Staff mutation requests return `403` even if the API is called directly.
-
-> The recruiter confirmed production authentication was not required for the assessment. This is therefore a lightweight review/demo RBAC layer, not a claim of production IAM. See `docs/15-DEMO_AUTH_RBAC.md` for the product and technical rationale.
-
-## What the product does
-- Login/logout with HR Manager and read-only HR Staff demo roles.
-- Add, view and update employees as HR Manager; DELETE uses documented soft deletion so HR records are retained but removed from current views.
-- Server-side search, filtering, sorting and pagination for a 10k employee directory.
-- Country salary insights: headcount, min/max/average salary and total payroll.
-- Job-title benchmarks within a country.
-- Highest/lowest salary context for HR review.
-- Deterministic, idempotent 10,000-row seed process based on `first_names.txt` + `last_names.txt`.
+Production persistence uses the connected Neon PostgreSQL database. The database was initialized through a one-time Git-triggered migration/seed release and ordinary deployments are side-effect free.
 
 ## Architecture
 
@@ -32,7 +81,7 @@ Browser
   │
   ▼
 Next.js / React / TypeScript
-  │ same-origin /api/* + HttpOnly signed session
+  │ same-origin /api/*
   ▼
 FastAPI / Pydantic / SQLAlchemy
   │
@@ -40,50 +89,64 @@ FastAPI / Pydantic / SQLAlchemy
 PostgreSQL / Neon
 ```
 
-The application is a modular monolith rather than a distributed system: at 10k employees, indexed SQL aggregations and pagination are simpler, safer and fast enough.
+This remains a **modular monolith**. At the required scale, that avoids distributed-system complexity while keeping boundaries clear enough to extract later if measurements justify it.
+
+## Current quality evidence
+
+GitHub Actions currently enforces:
+
+- **42 backend functional/API tests passing**;
+- **88.24% backend coverage**, above an enforced **85%** floor;
+- Ruff correctness/static checks;
+- Python dependency audit with no known vulnerabilities in the audited environment;
+- a dedicated **10,000-employee performance regression gate**;
+- Python compilation;
+- frontend production dependency audit;
+- TypeScript typecheck;
+- optimized Next.js production build.
+
+Detailed evidence is recorded in `docs/13-FINAL_QA_SECURITY_PERFORMANCE_REVIEW.md` and `docs/quality-loop/`.
 
 ## Repository map
-- `frontend/` — Next.js HR workspace and demo login experience.
-- `backend/` — FastAPI API, demo authorization, SQLAlchemy model, Alembic migrations and seed CLI.
-- `backend/tests/` — requirement-derived API/unit/RBAC tests.
-- `docs/00-ASSESSMENT_ANALYSIS.md` — brief decomposition, assumptions, user stories and edge cases.
-- `docs/06-ROLE_BASED_DESIGN_REVIEW.md` — PM/architecture/backend/frontend/QA/security/performance debate.
-- `docs/08-CODE_REVIEW.md` — independent review findings and fixes.
-- `docs/09-PRODUCTION_RESEARCH.md` — Workday/Pave/Deel domain research and what was/wasn't adopted.
-- `docs/12-INTERNAL_PRODUCT_TECH_DECISIONS.md` — detailed internal product/technical rationale and interview-prep decision record.
-- `docs/13-FINAL_QA_SECURITY_PERFORMANCE_REVIEW.md` — final independent QA, security and performance evidence.
-- `docs/14-FINAL_REQUIREMENTS_SIGNOFF.md` — final PM requirement-by-requirement completion and release-gate matrix.
-- `docs/15-DEMO_AUTH_RBAC.md` — demo login/permission product and technical decision record.
+
+### Core assessment evidence
+- `frontend/` — Next.js salary-management UI.
+- `backend/` — FastAPI API, SQLAlchemy models, Alembic migrations and seed CLI.
+- `backend/tests/` — requirement-derived tests and performance regression coverage.
+- `docs/00-ASSESSMENT_ANALYSIS.md` — brief decomposition, assumptions and edge cases.
+- `docs/01-PRODUCT_REQUIREMENTS.md` — final clarified product scope.
+- `docs/02-ARCHITECTURE.md` — architecture and system boundaries.
+- `docs/03-TEST_STRATEGY.md` — test approach.
+- `docs/04-AI_WORKLOG.md` — intentional AI-assisted development record.
+- `docs/05-TRADEOFFS.md` — rejected alternatives and why.
+- `docs/07-REQUIREMENTS_TRACEABILITY.md` — requirement mapping.
+- `docs/08-CODE_REVIEW.md` — independent review findings/fixes.
+- `docs/09-PRODUCTION_RESEARCH.md` — domain research and selective adoption.
+- `docs/13-FINAL_QA_SECURITY_PERFORMANCE_REVIEW.md` — current QA/security/performance evidence.
+- `docs/14-FINAL_REQUIREMENTS_SIGNOFF.md` — current PM sign-off.
 - `docs/adr/` — architecture decision records.
 
-## Quality status
-- GitHub Actions enforces backend tests, the >=85% coverage gate, Python compile checks, frontend dependency installation, TypeScript typecheck and production Next.js build.
-- RBAC regression tests cover manager login, invalid login, protected APIs, HR Staff read-only access, manager write access and logout.
-- The deterministic 10k seed remains idempotent and benchmarkable.
-- Frontend dependency pins use the reviewed security baseline: Next.js 16.3.8 and React/React DOM 19.3.0.
-
-## Production data
-The connected Neon PostgreSQL database was initialized through a one-time Git-triggered Vercel backend build running:
-
-```text
-alembic upgrade head
-python -m app.seed --count 10000
-```
-
-That production deployment reached `READY`, which means migrations and the deterministic 10,000-row seed completed successfully. The temporary build seed and HTTP bootstrap surface were then removed from `master`; ordinary deployments are side-effect free again.
+### Optional enhancement evidence
+- `docs/15-DEMO_AUTH_RBAC.md` — demo login/RBAC rationale.
+- `docs/16-ASYNC_FILTERED_EXPORT.md` — asynchronous filtered export design.
+- `docs/quality-loop/` — later professional-readiness review cycles.
 
 ## Local backend
+
 ```bash
 cd backend
 python -m venv .venv
 source .venv/bin/activate
-pip install -e ".[test,postgres]" pytest-cov
+pip install -e ".[test]" pytest-cov
 alembic upgrade head
 python -m app.seed --count 10000
 uvicorn app.main:app --reload
 ```
 
+Set `DATABASE_URL` to PostgreSQL for production-like persistence. The test suite uses an isolated SQLite test database where appropriate.
+
 ## Local frontend
+
 ```bash
 cd frontend
 cp .env.example .env.local
@@ -92,30 +155,27 @@ npm run dev
 ```
 
 ## Docker / PostgreSQL
+
 ```bash
 docker compose up --build
 ```
-Then run the one-time migration/seed against the backend container/database before first use.
+
+Run the one-time migration/seed against the database before first use.
 
 ## Deployment
-`vercel.json` uses Vercel Services to deploy Next.js + FastAPI as one Git-driven product. Production uses the connected Neon PostgreSQL `DATABASE_URL`; serverless-local SQLite is not used for compensation persistence.
+
+`vercel.json` deploys Next.js + FastAPI as one Git-driven product. Production persistence uses Neon PostgreSQL via `DATABASE_URL`; serverless-local SQLite is not used for compensation data.
 
 ## AI-assisted development
-AI was used as multiple explicit engineering roles rather than as a code generator that was blindly accepted:
-1. PM requirement analysis and ambiguity discovery.
-2. Staff architecture review.
-3. Backend implementation via TDD.
-4. Frontend implementation.
-5. Independent code review.
-6. Independent QA pass derived again from the source brief.
-7. Release/security/performance review.
-8. Post-scope demo RBAC implemented with tests and backend enforcement.
 
-The repo intentionally preserves failing-test and fix commits so reviewers can see how the solution evolved.
+AI was used as an explicit engineering workflow rather than as an unchecked code generator:
 
-## Recruiter clarifications incorporated
-Incubyte replied on 2026-10-05. The clarified core scope is reflected in the one-page PRD, ADRs, tests and implementation: annual gross base salary with currency, candidate-chosen controlled reference values and seed semantics, unique employee code, soft deletion by product choice, current salary only, and no production authentication requirement for the trusted-HR assessment environment.
+1. Product Manager — requirements, assumptions and clarification questions.
+2. Staff Architect — boundaries, schema, indexes and scaling posture.
+3. Backend Developer — API/persistence implementation with tests.
+4. Frontend Developer — HR workflows and analytics UI.
+5. QA Engineer — requirement-derived tests independent of implementation assumptions.
+6. Code Reviewer — correctness, maintainability, security and failure-mode review.
+7. Release/Performance Reviewer — deployment, dependency and 10k-scale verification.
 
-The demo login/RBAC was added afterward as a clearly documented enhancement, without changing the stated production-IAM scope.
-
-See `docs/01-PRODUCT_REQUIREMENTS.md` for the final one-page scope and deliberate exclusions.
+Unknowns were documented as assumptions, recruiter clarification was handled as change control, and later enhancements remain explicitly separated from the original assessment scope.
