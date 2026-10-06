@@ -74,9 +74,39 @@ The search field relied only on placeholder text and dialogs did not support Esc
 
 **Fix:** Add an accessible search label and Escape keyboard handling for form/detail dialogs.
 
+## Cycle 2 review findings
+
+### CR-11 — Concurrent export workers could race on the same queued job
+**Severity:** High (delivery correctness)
+
+The immediate browser dispatch and scheduled recovery worker could both observe the same queued export before either persisted a `processing` state, creating a risk of duplicate email delivery.
+
+**Fix:** Claim each job through a conditional atomic database update (`queued` -> `processing`) that increments attempts only when exactly one worker wins the claim. A regression test calls processing twice and asserts the email send path executes once.
+
+### CR-12 — Final-attempt worker crash could leave export permanently processing
+**Severity:** High (operational correctness)
+
+Stale recovery originally only requeued `processing` jobs when attempts were below the retry ceiling. If the worker died after claiming the third/final attempt, the job no longer qualified for recovery and could remain `processing` indefinitely.
+
+**Fix:** Recovery now inspects every stale processing job. Retryable jobs return to `queued`; jobs that have exhausted the attempt budget transition to terminal `failed` with `completed_at` and an explicit timeout reason. Regression tests cover both branches.
+
+### CR-13 — Final QA evidence drifted behind the implementation
+**Severity:** Medium (submission/evidence quality)
+
+The earlier final QA document still described authentication as out of scope and frontend build verification as pending even after role-based demo authentication and CI frontend builds were added.
+
+**Fix:** Refresh final QA evidence from the latest GitHub Actions results and explicitly distinguish automated build verification from browser/E2E UAT.
+
+### CR-14 — Frontend has no automated component/E2E test suite
+**Severity:** Medium (test depth)
+
+The frontend release gate currently runs TypeScript type checking and a production Next.js build, but there is no React component test or browser E2E suite.
+
+**Status:** Open, documented rather than hidden. Backend behavior, authorization, export generation, concurrency and API boundaries are automated; browser-level interaction remains a UAT/test-depth follow-up.
+
 ## Clarification-driven follow-up
 Recruiter guidance on 2026-10-05 resolved the earlier scope questions:
-- Authentication/RBAC is explicitly not required for the assessment; production requirement remains documented.
+- Authentication/RBAC was not required by the original assessment; a small demo HR Manager/HR Staff role boundary was later added as a production-minded extension.
 - Current salary is sufficient; salary history remains deliberately out of scope.
 - Deletion semantics are a product decision; hard delete was replaced with tested soft deletion.
 - Controlled Country/JobTitle reference values and deterministic idempotent seed behavior are retained as documented design choices.
@@ -84,4 +114,5 @@ Recruiter guidance on 2026-10-05 resolved the earlier scope questions:
 ## Remaining deliberate gaps
 - Full audit/event ledger and restore workflow are not implemented.
 - FX normalization/cross-country comparison is intentionally excluded.
-- Frontend dependency build verification remains a CI/deployment release gate when package installation is unavailable locally.
+- Frontend component/E2E automation is not implemented; typecheck/build are enforced in CI.
+- Live export-email UAT remains gated on SMTP provider credentials.
