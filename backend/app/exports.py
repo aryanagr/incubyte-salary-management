@@ -146,22 +146,33 @@ def _claim_export_job(db: Session, job_id: int) -> ExportJob | None:
     return db.get(ExportJob, job_id)
 
 
-def _recover_stale_jobs(db: Session) -> int:
+def _recover_stale_jobs(db: Session) -> tuple[int, int]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=STALE_PROCESSING_MINUTES)
     stale = db.scalars(
         select(ExportJob).where(
             ExportJob.status == "processing",
             ExportJob.started_at.is_not(None),
             ExportJob.started_at < cutoff,
-            ExportJob.attempts < MAX_EXPORT_ATTEMPTS,
         )
     ).all()
+
+    requeued = 0
+    failed = 0
+    now = datetime.now(timezone.utc)
     for job in stale:
-        job.status = "queued"
-        job.last_error = "Recovered after worker timeout"
+        if job.attempts < MAX_EXPORT_ATTEMPTS:
+            job.status = "queued"
+            job.last_error = "Recovered after worker timeout"
+            requeued += 1
+        else:
+            job.status = "failed"
+            job.last_error = "Worker timed out after final delivery attempt"
+            job.completed_at = now
+            failed += 1
+
     if stale:
         db.commit()
-    return len(stale)
+    return requeued, failed
 
 
 def process_export_job(db: Session, job: ExportJob) -> str:
@@ -199,7 +210,7 @@ def process_export_job(db: Session, job: ExportJob) -> str:
 
 
 def process_export_jobs(db: Session, *, limit: int = 3) -> dict[str, int]:
-    recovered = _recover_stale_jobs(db)
+    recovered, stale_failed = _recover_stale_jobs(db)
     job_ids = db.scalars(
         select(ExportJob.id)
         .where(ExportJob.status == "queued", ExportJob.attempts < MAX_EXPORT_ATTEMPTS)
@@ -212,7 +223,17 @@ def process_export_jobs(db: Session, *, limit: int = 3) -> dict[str, int]:
         if not job:
             continue
         result = process_export_job(db, job)
-        if result == "sent": sent += 1
-        elif result == "failed": failed += 1
-        elif result == "retried": retried += 1
-    return {"processed": len(job_ids), "sent": sent, "retried": retried, "failed": failed, "recovered": recovered}
+        if result == "sent":
+            sent += 1
+        elif result == "failed":
+            failed += 1
+        elif result == "retried":
+            retried += 1
+    return {
+        "processed": len(job_ids),
+        "sent": sent,
+        "retried": retried,
+        "failed": failed + stale_failed,
+        "recovered": recovered,
+        "stale_failed": stale_failed,
+    }
