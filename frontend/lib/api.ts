@@ -95,18 +95,21 @@ export function getCountryInsight(countryCode: string) {
   return request<CountryInsight>(`/api/v1/insights/countries/${countryCode}`);
 }
 
-export function queueExport(input: ExportRequest) {
-  return request<ExportJob>("/api/v1/exports", {
+export async function queueExport(input: ExportRequest) {
+  const job = await request<ExportJob>("/api/v1/exports", {
     method: "POST",
     body: JSON.stringify(input),
   });
-}
 
-export function dispatchExport(id: number) {
-  return request<ExportJob>(`/api/v1/exports/${id}/dispatch`, {
+  // The job is already durable before this request starts. The dispatch request
+  // is deliberately fire-and-forget so the UI gets the queued state immediately.
+  // A scheduled recovery worker can retry the job if this browser request is lost.
+  void request<ExportJob>(`/api/v1/exports/${job.id}/dispatch`, {
     method: "POST",
     keepalive: true,
-  });
+  }).catch(() => undefined);
+
+  return job;
 }
 
 export function getExportJob(id: number) {
