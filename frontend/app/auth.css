@@ -49,6 +49,17 @@
 .role-boundary.read-only .topbar > .button.primary,
 .role-boundary.read-only .row-actions { display: none; }
 .readonly-banner { width: min(1440px, calc(100% - 40px)); margin: 36px auto -28px; display: inline-flex; border-radius: 999px; padding: 5px 9px; background: #eef4f6; color: #315360; font-size: 11px; font-weight: 800; }
+.export-modal { max-width: 620px; }
+.modal-copy { color: var(--muted); line-height: 1.6; margin: 8px 0 0; }
+.export-filter-summary { display: grid; gap: 5px; margin: 20px 0 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: #fafbfc; }
+.export-filter-summary strong { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+.export-filter-summary span { color: var(--muted); font-size: 13px; }
+.export-status { display: grid; gap: 9px; margin-top: 22px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; }
+.export-status strong { font-size: 16px; }
+.export-status span { color: var(--muted); line-height: 1.5; }
+.export-status-sent { background: #f2f8f4; }
+.export-status-failed { background: #fff5f5; }
+.export-status .button { justify-self: start; margin-top: 4px; }
 @media (max-width: 850px) {
   .login-shell { grid-template-columns: 1fr; }
   .login-hero { padding: 44px 24px 12px; }
