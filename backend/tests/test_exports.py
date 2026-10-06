@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
-from app.exports import build_export_workbook, process_export_jobs
+from app.exports import build_export_workbook, process_export_job, process_export_jobs
 from app.models import ExportJob
 
 
@@ -119,3 +119,19 @@ def test_worker_retries_delivery_failures(client: TestClient, db: Session, monke
     assert job.status == "queued"
     assert job.attempts == 1
     assert "mail provider unavailable" in (job.last_error or "")
+
+
+def test_same_export_cannot_be_delivered_twice(client: TestClient, db: Session, monkeypatch):
+    queued = client.post(
+        "/api/v1/exports",
+        json={"recipient_email": "reviewer@example.com"},
+    ).json()
+    job = db.get(ExportJob, queued["id"])
+    assert job is not None
+
+    sends = []
+    monkeypatch.setattr("app.exports.send_export_email", lambda **kwargs: sends.append(kwargs))
+
+    assert process_export_job(db, job) == "sent"
+    assert process_export_job(db, job) == "skipped"
+    assert len(sends) == 1
