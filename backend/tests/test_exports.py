@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
 from fastapi.testclient import TestClient
@@ -135,3 +136,45 @@ def test_same_export_cannot_be_delivered_twice(client: TestClient, db: Session, 
     assert process_export_job(db, job) == "sent"
     assert process_export_job(db, job) == "skipped"
     assert len(sends) == 1
+
+
+def test_stale_processing_job_is_requeued_when_attempts_remain(client: TestClient, db: Session):
+    queued = client.post(
+        "/api/v1/exports",
+        json={"recipient_email": "reviewer@example.com"},
+    ).json()
+    job = db.get(ExportJob, queued["id"])
+    assert job is not None
+    job.status = "processing"
+    job.attempts = 1
+    job.started_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    db.commit()
+
+    result = process_export_jobs(db, limit=0)
+    db.refresh(job)
+
+    assert result["recovered"] == 1
+    assert job.status == "queued"
+    assert "worker timeout" in (job.last_error or "").lower()
+
+
+def test_stale_processing_job_fails_after_final_attempt(client: TestClient, db: Session):
+    queued = client.post(
+        "/api/v1/exports",
+        json={"recipient_email": "reviewer@example.com"},
+    ).json()
+    job = db.get(ExportJob, queued["id"])
+    assert job is not None
+    job.status = "processing"
+    job.attempts = 3
+    job.started_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    db.commit()
+
+    result = process_export_jobs(db, limit=0)
+    db.refresh(job)
+
+    assert result["stale_failed"] == 1
+    assert result["failed"] == 1
+    assert job.status == "failed"
+    assert job.completed_at is not None
+    assert "final delivery attempt" in (job.last_error or "").lower()
