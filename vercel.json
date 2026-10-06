@@ -11,6 +11,12 @@
       "entrypoint": "main:app"
     }
   },
+  "crons": [
+    {
+      "path": "/api/internal/export-jobs/process",
+      "schedule": "0 3 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/api", "destination": { "service": "backend" } },
     { "source": "/api/(.*)", "destination": { "service": "backend" } },
