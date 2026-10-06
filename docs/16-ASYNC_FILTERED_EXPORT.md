@@ -25,11 +25,12 @@ PostgreSQL export_jobs
   │
   ├── browser fire-and-forget dispatch ──► worker invocation
   │                                        │
+  │                                        ├── atomically claim queued job
   │                                        ├── query matching employees
   │                                        ├── generate XLSX in memory
   │                                        └── SMTP attachment delivery
   │
-  └── Vercel Cron daily recovery ─────────► retries queued jobs
+  └── Vercel Cron daily recovery ─────────► retries queued/stale jobs
 ```
 
 ### Why a database-backed queue instead of FastAPI BackgroundTasks
@@ -43,11 +44,18 @@ The Vercel Hobby deployment cannot provide a frequent cron cadence suitable for 
 
 ## Job lifecycle
 - `queued` — durable request exists and is eligible for processing.
-- `processing` — worker claimed the request.
+- `processing` — one worker atomically claimed the request.
 - `sent` — workbook delivered successfully; row count recorded.
-- `failed` — delivery exhausted the configured retry limit.
+- `failed` — delivery exhausted the configured retry limit or the final worker attempt timed out.
 
 The worker currently allows up to three delivery attempts and persists a bounded error message instead of losing failure context.
+
+### Concurrency and stale-job recovery
+Immediate dispatch and cron recovery may overlap, so workers do not claim a job by first reading and then mutating it. The claim is a conditional database update from `queued` to `processing`; only the worker that updates exactly one row proceeds. This prevents two workers from intentionally processing the same queued job concurrently.
+
+A `processing` job older than the stale threshold is inspected by recovery. If attempts remain, it is returned to `queued`. If the final attempt was already consumed, it moves to terminal `failed` with `completed_at` and a timeout reason rather than remaining stuck forever.
+
+SMTP itself does not provide an exactly-once transaction with the application database. If a process dies after the provider accepted a message but before the terminal database commit, a retry could theoretically cause duplicate delivery. At this assessment scale this is documented as an at-least-once delivery edge case; a production mail provider with idempotency keys/event callbacks would be the next hardening step.
 
 ## Filter snapshot
 The export job stores:
@@ -92,6 +100,9 @@ Automated tests cover:
 - XLSX structure/order;
 - successful delivery state transition;
 - retry behavior on provider failure;
+- duplicate-processing guard for the same job;
+- stale processing requeue while retries remain;
+- terminal failure for a stale final attempt;
 - export authentication;
 - requester ownership boundary;
 - cron-secret authorization.
