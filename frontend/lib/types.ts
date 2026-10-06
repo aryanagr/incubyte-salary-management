@@ -69,3 +69,24 @@ export type CountryInsight = {
     average_salary: string | null;
   }>;
 };
+
+export type ExportRequest = {
+  recipient_email: string;
+  search?: string;
+  country_code?: string;
+  job_title_id?: number;
+  sort_by: "full_name" | "salary" | "hired_at" | "updated_at" | "employee_code";
+  sort_dir: "asc" | "desc";
+};
+
+export type ExportJob = {
+  id: number;
+  recipient_email: string;
+  status: "queued" | "processing" | "sent" | "failed";
+  attempts: number;
+  row_count: number | null;
+  last_error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+};
