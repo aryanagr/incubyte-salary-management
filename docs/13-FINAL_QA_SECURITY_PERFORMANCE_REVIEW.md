@@ -1,23 +1,28 @@
 # Final QA, Security & Performance Review
 
 ## Review scope
-Final independent pass after recruiter clarification and implementation changes.
+Independent QA/security/performance evidence for the current implementation. This document was refreshed in Cycle 2 after authentication/RBAC and asynchronous export functionality were added.
 
-## Automated quality
-- Backend tests: **21 passing**.
-- Coverage: **89.81%**.
-- Coverage floor: **85%**.
+## Current automated quality evidence
+Latest code-bearing Cycle 2 CI run (`15866d2314c7ffd9838f3b36bc2569eb27503dbb`) completed successfully.
+
+- Backend tests: **42 passing**.
+- Backend coverage: **88.24%**.
+- Enforced backend coverage floor: **85%**.
 - Python compilation: pass.
-- FastAPI service-root import (`main:app`): pass.
-- TS/TSX syntax transpilation: pass.
+- Frontend TypeScript typecheck: pass.
+- Frontend optimized Next.js production build: pass.
+- Frontend dependency install/audit in CI: pass.
 
-## Performance verification
-Fresh migrated SQLite verification database with 10,000 seeded employees.
+The backend CI output includes one upstream Starlette/TestClient deprecation warning about the future `httpx2` transition. It does not currently fail tests, but it is tracked as dependency-maintenance noise rather than ignored.
 
-### Seed
-- 10,000-row deterministic upsert: **1.246s** on this final review run.
+## Performance verification baseline
+Earlier final-review measurements used a fresh migrated SQLite verification database with 10,000 seeded employees. These measurements remain useful as a local baseline but were **not rerun in Cycle 2**, because the Cycle 2 changes were isolated to export-job lifecycle/recovery and documentation.
 
-### Endpoint timing samples
+### Seed baseline
+- 10,000-row deterministic upsert: **1.246s** on the recorded review run.
+
+### Endpoint timing baseline
 20 post-warmup requests using FastAPI TestClient:
 
 | Request | Median | P95 |
@@ -41,37 +46,51 @@ Substring search uses `%term%`, so a standard PostgreSQL B-tree cannot fully opt
 
 ## Security review
 
+### Authentication and role boundary
+The original assessment did not require authentication, but the current implementation includes a small signed-cookie demo authentication boundary as a production-minded extension:
+- HR Manager: read + employee mutation access;
+- HR Staff: read/report/export access, no employee mutation access.
+
+Sensitive API responses use `Cache-Control: no-store`, and export status/dispatch lookups are scoped to the authenticated requester.
+
+This remains intentionally lighter than enterprise identity. Production compensation data would require SSO/OIDC, user lifecycle management, least-privilege roles and stronger session governance.
+
 ### Input/query safety
 - SQLAlchemy parameter binding used for user data.
-- No user-controlled SQL identifiers; sort field is regex/whitelist constrained.
+- No user-controlled SQL identifiers; sort field is constrained/whitelisted.
 - Salary is positive and fixed precision.
 - Country/job-title references are validated.
 - API list page size is capped.
+- Export recipient uses validated email input.
 
 ### Browser/XSS
 - UI renders normal data through React escaping.
 - No `dangerouslySetInnerHTML` usage.
 - No arbitrary HTML rendering from API data.
 
-### CORS
-- Origins are environment-controlled and default to localhost for development.
-- Credentials are disabled because auth is deliberately out of scope.
+### CORS/session behavior
+- Allowed origins are environment-controlled.
+- Credentialed requests are enabled because the current demo authentication uses an HTTP-only session cookie.
+- Production deployments mark the session cookie secure.
 
 ### Secrets
-- No production secrets/private keys discovered in application source.
-- Docker Compose includes only an explicitly local development PostgreSQL password.
-- `.env.example` files are tracked; real `.env` files are ignored.
+- Production secrets are environment variables rather than source-controlled values.
+- `AUTH_SECRET`, database secrets, cron secret and future SMTP credentials are not committed to Git.
+- `.env.example` files document required configuration while real `.env` files remain ignored.
 
-### Authentication exception
-No authentication/RBAC is implemented because recruiter clarification explicitly permits a single trusted HR Manager environment. This is acceptable for the assessment, not for real compensation data.
+### Async export security/reliability
+- Queue/status/dispatch APIs require an authenticated HR session.
+- Export jobs are requester-scoped.
+- Recovery cron requires `CRON_SECRET`.
+- Job claiming is a conditional atomic database update to prevent overlapping workers from deliberately processing the same queued job.
+- Stale processing jobs are requeued while retries remain and terminally failed when the final attempt has timed out.
+- Live SMTP delivery is intentionally not marked verified until provider credentials are configured.
 
 ### Dependency security
-The original frontend pins were outdated against the current October 2026 security baseline. Updated before submission:
+Submission pins use:
 - Next.js `16.3.8`;
 - React `19.3.0`;
 - React DOM `19.3.0`.
-
-Official Next.js September 2026 security guidance recommends 16.3.8 as the Active LTS security release.
 
 ## UI/source review findings addressed
 - Analytics country and directory country filters are independent.
@@ -81,29 +100,27 @@ Official Next.js September 2026 security guidance recommends 16.3.8 as the Activ
 - Dialogs close with Escape.
 - Backend array-style validation errors surface a useful message.
 - Delete wording accurately describes retained soft-deleted records.
+- Manager-only mutation controls are driven from explicit role state.
+- Export dialog snapshots current directory filters/sort and reports durable job state.
 
-## Outstanding UI verification limitation
-A full local Next.js browser session could not be executed because npm dependencies could not be fetched in the current sandbox. Two install attempts timed out. This is recorded as a release gate rather than falsely marked complete.
+## Current QA limitations / release gates
+These are deliberately recorded as open rather than being presented as completed:
 
-Required next verification when package access/deployment is available:
-1. `npm install`;
-2. `npm run typecheck`;
-3. `npm run build`;
-4. run application through Vercel Services or equivalent;
-5. browser-check create/edit/delete/search/filter/pagination/modal flows;
-6. verify mobile viewport;
-7. inspect browser console/network errors;
-8. inspect Vercel runtime logs after deployed smoke traffic.
+1. **Frontend automated interaction coverage:** CI currently proves TypeScript correctness and a production Next.js build, but there is no React component-test or browser E2E suite.
+2. **Browser UAT evidence:** a full interactive browser pass for login, CRUD, search/filter/pagination, role restrictions and export status flow should be captured before final submission if browser automation/manual evidence is available.
+3. **Live email UAT:** SMTP provider credentials are not configured, so end-to-end delivery of the generated `.xlsx` attachment has not been verified against a real mailbox.
+4. **Latest deployment observation:** Vercel deployment checks were previously successful during Cycle 1/export migration, but the Vercel connector later returned a scope re-authentication error during Cycle 2. Current code CI is green; the latest Cycle 2 deployment state must be rechecked after connector access is restored.
 
 ## Production-only security follow-ups
-- SSO/OIDC and least-privilege RBAC.
+- SSO/OIDC and least-privilege enterprise RBAC.
 - Audit ledger for employee/salary changes.
-- Content Security Policy / production security headers.
+- Content Security Policy / stronger production security headers.
 - Rate/abuse controls.
 - Secret manager and credential rotation.
 - Dependency scanner / Dependabot-style workflow.
 - PostgreSQL backups, PITR, encryption and retention policy.
 - Structured security logging and alerts.
+- Mail provider idempotency/event callbacks if exactly-once-like delivery semantics become important.
 
-## Final assessment judgement
-Within the assignment's clarified scope, the backend/data architecture is release-quality for a take-home submission and deliberately avoids unjustified infrastructure. The only material verification gap remaining is the real Next.js/deployed browser pass, which depends on frontend package/deployment access outside this sandbox.
+## Current assessment judgement
+The core backend/data behavior, role boundaries and export job lifecycle have automated evidence and meet the configured quality gate. Cycle 2 closed the stale-final-attempt export defect and corrected evidence drift. The main remaining verification gaps are **frontend interaction/E2E evidence**, **live SMTP delivery**, and **rechecking the newest Vercel deployment once connector scope access is restored**.
