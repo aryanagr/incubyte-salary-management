@@ -1,25 +1,27 @@
 # Professional Readiness Loop — Cycle 01
 
-Status: **OPEN**
+Status: **CLOSED**
 
-This document records the independent review → UAT → lead scope → development → QA → manager loop requested for the project. The purpose is to make the quality process inspectable rather than silently editing the final snapshot.
+This document records the independent review → UAT → lead scope → development → QA → manager loop requested for the project. The original file was created before implementation/QA evidence was filled in. It was reconciled on 2026-10-06 from the actual repository and GitHub Actions evidence rather than leaving the historical `Pending` placeholders.
+
+> Closure note: CR-11 and CR-12 were discovered as genuine unfinished Cycle 01 acceptance debt during the Cycle 02 reconciliation. They were implemented before this cycle was formally closed. The history is intentionally preserved rather than rewritten.
 
 ## 1. Code Reviewer findings
 
-| ID | Severity | Finding | Decision |
+| ID | Severity | Finding | Final status |
 | --- | --- | --- | --- |
-| CR-01 | High | Employee search replaced all rows with one loading row, causing visible layout collapse/expand on each request. | Fix immediately. |
-| CR-02 | High | Overlapping search/filter requests could resolve out of order and let stale data overwrite newer results. | Fix immediately. |
-| CR-03 | High | Demo session signing silently falls back to a known development secret if `AUTH_SECRET` is missing in production. | Fail closed in production. |
-| CR-04 | Medium | Authenticated salary API responses do not explicitly opt out of intermediary/browser caching. | Add `Cache-Control: no-store`. |
-| CR-05 | Medium | Retired bootstrap implementation remains as dead production code after the bootstrap route was removed. | Delete it. |
-| CR-06 | Medium | HR Staff permissions are visually implemented through a body CSS class even though the API is correctly protected. | Render role-aware controls explicitly. |
-| CR-07 | Medium | Any `/auth/me` failure redirects to login, including transient 5xx/network failures. | Show recoverable workspace error for non-401 failures. |
-| CR-08 | Medium | Session expiry during an already-open dashboard produces API errors instead of a clean return to login. | Add centralized unauthorized handling. |
-| CR-09 | Medium | Health check confirms process liveness but not database readiness. | Add DB readiness endpoint. |
-| CR-10 | Medium | `employee_code` is unique but not canonicalized, allowing case variants in PostgreSQL. | Normalize employee code to uppercase. |
-| CR-11 | Medium | CI has tests/typecheck/build but no Python lint or dependency vulnerability gate. | Add bounded static/security checks. |
-| CR-12 | Medium | No repeatable automated load test exists for the required 10k-row operating size. | Add bounded CI load test. |
+| CR-01 | High | Employee search replaced all rows with one loading row, causing visible layout collapse/expand on each request. | **Closed** — background loading preserves the current table instead of replacing it. |
+| CR-02 | High | Overlapping search/filter requests could resolve out of order and let stale data overwrite newer results. | **Closed** — request sequencing prevents an older response from winning. |
+| CR-03 | High | Demo session signing silently falls back to a known development secret if `AUTH_SECRET` is missing in production. | **Closed** — production auth fails closed without the configured secret. |
+| CR-04 | Medium | Authenticated salary API responses do not explicitly opt out of intermediary/browser caching. | **Closed** — sensitive API responses use `Cache-Control: no-store` / `Pragma: no-cache`. |
+| CR-05 | Medium | Retired bootstrap implementation remains as dead production code after the bootstrap route was removed. | **Closed** — obsolete bootstrap path removed from active implementation. |
+| CR-06 | Medium | HR Staff permissions are visually implemented through a body CSS class even though the API is correctly protected. | **Closed** — `canManage` is an explicit component contract and mutation controls render from role state. |
+| CR-07 | Medium | Any `/auth/me` failure redirects to login, including transient 5xx/network failures. | **Closed** — only 401 redirects; transient failures show a retryable workspace error. |
+| CR-08 | Medium | Session expiry during an already-open dashboard produces API errors instead of a clean return to login. | **Closed** — centralized API 401 handling returns the user to login. |
+| CR-09 | Medium | Health check confirms process liveness but not database readiness. | **Closed** — `/health/ready` executes a database readiness query. |
+| CR-10 | Medium | `employee_code` is unique but not canonicalized, allowing case variants in PostgreSQL. | **Closed** — employee codes are canonicalized/validated consistently. |
+| CR-11 | Medium | CI has tests/typecheck/build but no Python lint or dependency vulnerability gate. | **Closed during reconciliation** — Ruff, `pip-audit`, and frontend `npm audit` are blocking CI steps. |
+| CR-12 | Medium | No repeatable automated load test exists for the required 10k-row operating size. | **Closed during reconciliation** — dedicated 10k-row CI performance regression test added with explicit bounded thresholds. |
 
 ## 2. UAT findings
 
@@ -40,21 +42,25 @@ Acceptance scenarios reviewed independently from the implementation:
 - Error and loading states.
 - Mobile/table overflow behavior.
 
-### UAT defects/gaps
+### UAT defects/gaps and disposition
 
-1. **Search layout shift** — confirmed; rows disappeared during background fetch.
-2. **No stale-response protection** — rapid search could theoretically render an older response last.
-3. **Authentication error state** — transient auth API failures looked like an expired login.
-4. **Role UX coupling** — read-only presentation relied on a global body class instead of the role being explicit in the component contract.
-5. **No bounded load-test evidence** tied to the current 10k dataset.
+1. **Search layout shift** — fixed by retaining rendered rows during background requests.
+2. **No stale-response protection** — fixed by request sequencing/identity checks.
+3. **Authentication error state** — fixed; transient failures are distinguishable from an expired/invalid session.
+4. **Role UX coupling** — fixed; role state is explicit in the component contract.
+5. **No bounded load-test evidence** — fixed during reconciliation with a repeatable 10k-row CI performance test.
+
+Browser-level automated E2E coverage is not claimed here. Typecheck/build and backend/API behavior are automated; interactive browser coverage is tracked separately as a later QA-depth follow-up.
 
 ## 3. Lead scope
 
-### Must fix in Cycle 01
+### Required for closure
 - CR-01 through CR-10.
-- Add lint/dependency checks that are deterministic enough for CI.
-- Add a bounded 10k-record load-test harness with explicit thresholds.
-- Update tests and documentation for changed contracts.
+- Deterministic lint/dependency security checks.
+- Bounded 10k-record performance regression harness.
+- Tests/documentation updated for changed contracts.
+
+All required items are now implemented and green in CI.
 
 ### Deliberately deferred
 - Enterprise SSO/MFA/user provisioning.
@@ -64,16 +70,57 @@ Acceptance scenarios reviewed independently from the implementation:
 - Effective-dated compensation history.
 - Large-scale search infrastructure; SQL `%term%` remains acceptable for ~10k rows.
 
-These are not blockers for the assessment product and would add speculative complexity.
+These remain deliberate scope decisions rather than hidden failures.
 
-## 4. Developer implementation
+## 4. Developer implementation evidence
 
-Pending.
+The implementation work corresponding to the review findings is present in the current codebase. Notable resulting behaviors include:
+
+- non-destructive/debounced directory loading and stale-response protection;
+- explicit HR Manager vs HR Staff rendering plus server-side mutation authorization;
+- fail-closed production session signing and centralized 401 handling;
+- no-store policy for sensitive API responses;
+- database readiness endpoint;
+- canonical employee identifiers;
+- deterministic 10,000-row seed path;
+- production dependency/security upgrades;
+- CI lint, vulnerability-audit and performance gates.
+
+Cycle 01's final two missing implementation items were completed during the Cycle 02 reconciliation:
+- `backend/tests/test_performance.py` adds the bounded 10k-row regression test;
+- `.github/workflows/ci.yml` now blocks on Ruff, Python dependency audit, frontend dependency audit and the 10k performance gate.
 
 ## 5. QA evidence
 
-Pending.
+Final closure gate: GitHub Actions run **#114**, commit `6e28f1421048e12f679b441abfc3b6f84d7ea234`, conclusion **success**.
+
+### Backend
+- Ruff selected correctness/static checks: **pass** (`All checks passed!`).
+- `pip-audit`: **pass**, **no known vulnerabilities found** in audited installed dependencies.
+- Functional/API test suite: **42 passed**, 1 performance test deselected from the coverage run.
+- Coverage: **88.24%**, above enforced **85%** minimum.
+- Dedicated 10k-row performance regression gate: **1 passed**.
+- Python compile check: **pass**.
+
+### Frontend
+- `npm install`: **0 vulnerabilities** reported.
+- production dependency `npm audit --audit-level=high`: **0 vulnerabilities**.
+- TypeScript `tsc --noEmit`: **pass**.
+- optimized Next.js production build: **pass**.
+
+### QA note
+An upstream Starlette/TestClient deprecation warning about a future `httpx2` migration is present. It is dependency-maintenance debt, not a failing product test.
 
 ## 6. Manager verdict
 
-**Cycle remains OPEN** until all approved fixes are implemented, CI is green, bounded load thresholds pass, and there are no unresolved High-severity findings.
+**CLOSED.**
+
+Closure criteria are satisfied:
+- no unresolved Cycle 01 High-severity finding;
+- all lead-approved implementation work is present;
+- backend tests and coverage gate pass;
+- frontend typecheck/build pass;
+- static/security dependency gates pass;
+- bounded 10k-row performance gate passes.
+
+The separate browser-E2E depth, live SMTP delivery, and newest deployment verification belong to the subsequent cycle because they relate to later authentication/export/release extensions rather than an unreported Cycle 01 success claim.
