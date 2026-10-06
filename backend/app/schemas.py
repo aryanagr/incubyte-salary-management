@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 EMPLOYMENT_STATUSES = {"active", "leave", "terminated"}
@@ -184,3 +184,42 @@ class JobTitleCountryInsight(BaseModel):
 
 
 SortDirection = Literal["asc", "desc"]
+SortField = Literal["full_name", "salary", "hired_at", "updated_at", "employee_code"]
+
+
+class ExportCreate(BaseModel):
+    recipient_email: EmailStr
+    search: str | None = Field(default=None, max_length=160)
+    country_code: str | None = Field(default=None, min_length=2, max_length=2)
+    job_title_id: int | None = Field(default=None, gt=0)
+    department: str | None = Field(default=None, max_length=100)
+    employment_status: str | None = Field(default=None, pattern="^(active|leave|terminated)$")
+    sort_by: SortField = "full_name"
+    sort_dir: SortDirection = "asc"
+
+    @field_validator("country_code", mode="before")
+    @classmethod
+    def normalize_export_country(cls, value: str | None) -> str | None:
+        return None if not value else value.strip().upper()
+
+    @field_validator("search", "department", mode="before")
+    @classmethod
+    def normalize_export_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = normalize_text(value)
+        return normalized or None
+
+
+class ExportJobOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    recipient_email: EmailStr
+    status: Literal["queued", "processing", "sent", "failed"]
+    attempts: int
+    row_count: int | None
+    last_error: str | None
+    created_at: datetime
+    started_at: datetime | None
+    completed_at: datetime | None
