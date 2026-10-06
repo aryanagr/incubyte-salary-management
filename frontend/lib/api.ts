@@ -1,4 +1,4 @@
-import type { AuthUser, CountryInsight, Employee, EmployeeInput, EmployeeList, ReferenceData } from "./types";
+import type { AuthUser, CountryInsight, Employee, EmployeeInput, EmployeeList, ExportJob, ExportRequest, ReferenceData } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -93,4 +93,15 @@ export function deleteEmployee(id: number) {
 
 export function getCountryInsight(countryCode: string) {
   return request<CountryInsight>(`/api/v1/insights/countries/${countryCode}`);
+}
+
+export function queueExport(input: ExportRequest) {
+  return request<ExportJob>("/api/v1/exports", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getExportJob(id: number) {
+  return request<ExportJob>(`/api/v1/exports/${id}`);
 }
